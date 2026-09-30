@@ -1,0 +1,44 @@
+{
+  "id": "dxcufgbs-token-context-menu",
+  "title": "Dxcufgb's token context menu",
+  "description": "Replaces the loose icons of the Token HUD (right-click a token) with a context menu that shows every icon together with its description. Status effects and other palettes open as sub-menus.",
+  "version": "1.0.0",
+  "authors": [
+    {
+      "name": "Dxcufgb",
+      "url": "https://github.com/Dxcufgb"
+    }
+  ],
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13"
+  },
+  "url": "https://github.com/dxcufgb/FoundryVTT-token-context-menu",
+  "manifest": "https://github.com/dxcufgb/FoundryVTT-token-context-menu/releases/latest/download/module.json",
+  "download": "https://github.com/dxcufgb/FoundryVTT-token-context-menu/releases/latest/download/module.zip",
+  "bugs": "https://github.com/dxcufgb/FoundryVTT-token-context-menu/issues",
+  "readme": "https://github.com/dxcufgb/FoundryVTT-token-context-menu#readme",
+  "license": "LICENSE",
+  "esmodules": [
+    "scripts/main.js"
+  ],
+  "styles": [
+    "styles/token-context-menu.css"
+  ],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    }
+  ],
+  "relationships": {
+    "recommends": [
+      {
+        "id": "dxcufgbs-lively-tokens",
+        "type": "module",
+        "reason": "Adds an 'Animated token ring' entry to the menu that opens Lively Tokens' ring window."
+      }
+    ]
+  }
+}

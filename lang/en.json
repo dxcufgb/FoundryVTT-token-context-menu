@@ -1,0 +1,23 @@
+{
+  "DXTCM": {
+    "Settings": {
+      "Enabled": {
+        "Name": "Token context menu",
+        "Hint": "Show the Token HUD (right-click a token) as a menu with icons and descriptions. Turn it off to get Foundry's plain icons back on this computer."
+      },
+      "FixedSize": {
+        "Name": "Keep menu size when zooming",
+        "Hint": "The menu keeps the same size on screen whatever the canvas zoom. Off: it grows and shrinks with the map, like Foundry's own icons."
+      }
+    },
+    "Menu": {
+      "Filter": "Filter…",
+      "Empty": "Nothing matches.",
+      "Unnamed": "Unnamed action",
+      "OverlayHint": "Right-click: show as large overlay"
+    },
+    "Lively": {
+      "Label": "Animated token ring"
+    }
+  }
+}

@@ -1,0 +1,129 @@
+/* Dxcufgb's token context menu - the Token HUD as a menu */
+
+/* The original icons stay in the HUD (the menu clicks them) but are hidden. */
+.dxtcm-active .col .control-icon,
+.dxtcm-active .palette { display: none !important; }
+
+.dxtcm-menu {
+  --dxtcm-bg: rgba(18, 18, 24, 0.96);
+  --dxtcm-border: var(--color-border-dark-highlight, rgba(255, 255, 255, 0.18));
+  --dxtcm-text: var(--color-text-light-highlight, #f0f0e0);
+  --dxtcm-hover: rgba(255, 255, 255, 0.1);
+  --dxtcm-accent: var(--color-warm-2, #ff6400);
+
+  position: absolute;
+  top: 0;
+  left: calc(100% + 12px);
+  z-index: 10;
+  min-width: 13rem;
+  max-width: 20rem;
+  padding: 0.25rem;
+  pointer-events: auto;
+  transform-origin: top left;
+  background: var(--dxtcm-bg);
+  border: 1px solid var(--dxtcm-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  color: var(--dxtcm-text);
+  font-family: var(--font-body, "Signika", sans-serif);
+  font-size: var(--font-size-14, 14px);
+  line-height: 1.2;
+  text-align: left;
+  user-select: none;
+}
+.dxtcm-menu.flip { left: auto; right: calc(100% + 12px); transform-origin: top right; }
+
+.dxtcm-menu .dxtcm-header {
+  padding: 0.3rem 0.5rem 0.35rem;
+  margin-bottom: 0.2rem;
+  border-bottom: 1px solid var(--dxtcm-border);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.85;
+}
+
+.dxtcm-menu .dxtcm-list { list-style: none; margin: 0; padding: 0; }
+.dxtcm-menu .dxtcm-list li { margin: 0; padding: 0; }
+.dxtcm-menu .dxtcm-list li[hidden] { display: none; }
+
+.dxtcm-menu .dxtcm-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  min-height: 2rem;
+  margin: 0;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dxtcm-menu .dxtcm-item:hover,
+.dxtcm-menu .dxtcm-item:focus-visible,
+.dxtcm-menu .dxtcm-item.open { background: var(--dxtcm-hover); outline: none; }
+.dxtcm-menu .dxtcm-item.active { border-color: var(--dxtcm-accent); background: rgba(255, 120, 40, 0.16); }
+.dxtcm-menu .dxtcm-item.overlay .dxtcm-label::after { content: " ★"; color: var(--dxtcm-accent); }
+
+.dxtcm-menu .dxtcm-icon {
+  flex: 0 0 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 1rem;
+}
+.dxtcm-menu .dxtcm-icon img,
+.dxtcm-menu .dxtcm-icon svg {
+  width: 1.5rem;
+  height: 1.5rem;
+  margin: 0;
+  border: none;
+  object-fit: contain;
+  opacity: 1;
+  filter: none;
+}
+.dxtcm-menu .dxtcm-icon i { margin: 0; }
+
+.dxtcm-menu .dxtcm-label { flex: 1; white-space: normal; }
+.dxtcm-menu .dxtcm-caret { flex: 0 0 auto; opacity: 0.6; }
+.dxtcm-menu.flip .dxtcm-caret { transform: rotate(180deg); order: -1; }
+
+/* Sub-menus (status effects, movement actions, ...) */
+.dxtcm-menu .dxtcm-sub {
+  position: absolute;
+  left: calc(100% + 4px);
+  width: 16rem;
+  padding: 0.25rem;
+  background: var(--dxtcm-bg);
+  border: 1px solid var(--dxtcm-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+}
+.dxtcm-menu .dxtcm-sub.flip { left: auto; right: calc(100% + 4px); }
+.dxtcm-menu .dxtcm-sub .dxtcm-list { max-height: min(60vh, 28rem); overflow-y: auto; }
+.dxtcm-menu .dxtcm-sub .dxtcm-item { min-height: 1.8rem; }
+
+.dxtcm-menu .dxtcm-filter {
+  width: 100%;
+  height: 1.8rem;
+  margin: 0 0 0.25rem;
+  color: inherit;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--dxtcm-border);
+  border-radius: 4px;
+}
+.dxtcm-menu .dxtcm-empty,
+.dxtcm-menu .dxtcm-hint {
+  margin: 0.2rem 0.4rem 0.1rem;
+  font-size: var(--font-size-12, 12px);
+  opacity: 0.65;
+}
+.dxtcm-menu .dxtcm-empty[hidden] { display: none; }
