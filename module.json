@@ -1,7 +1,7 @@
 {
   "id": "dxcufgbs-token-context-menu",
   "title": "Dxcufgb's token context menu",
-  "description": "Replaces the loose icons of the Token HUD (right-click a token) with a context menu that shows every icon together with its description. Status effects and other palettes open as sub-menus.",
+  "description": "Replaces the loose icons of the Token HUD (right-click a token) with a context menu that shows every icon together with its description. Status effects and other palettes open as sub-menus. Adds Follow (Dxcufgb's token follower) and Ride (Rideable) entries when those modules are active.",
   "version": "1.0.0",
   "authors": [
     {
@@ -38,6 +38,16 @@
         "id": "dxcufgbs-lively-tokens",
         "type": "module",
         "reason": "Adds an 'Animated token ring' entry to the menu that opens Lively Tokens' ring window."
+      },
+      {
+        "id": "dxcufgbs-token-follower",
+        "type": "module",
+        "reason": "Adds a 'Follow this token' entry to the menu."
+      },
+      {
+        "id": "Rideable",
+        "type": "module",
+        "reason": "Adds a 'Ride' entry to the menu on rideable tokens."
       }
     ]
   }

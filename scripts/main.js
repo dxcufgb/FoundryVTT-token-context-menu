@@ -9,12 +9,14 @@
  * and keep working without knowing anything about them. Palettes (status effects, movement
  * actions, ...) open as sub-menus.
  *
- * If Dxcufgb's lively tokens is active, the menu also gets an "Animated token ring" entry
- * that opens that module's ring window.
+ * Entries for other modules (Dxcufgb's lively tokens, Dxcufgb's token follower, Rideable)
+ * come from integrations.js. To follow or ride a token you do not own, the menu also opens
+ * on such tokens, then showing only those entries.
  */
 
+import { integrationEntries, hasGuestEntries } from "./integrations.js";
+
 const MODULE_ID = "dxcufgbs-token-context-menu";
-const LIVELY_ID = "dxcufgbs-lively-tokens";
 
 /** Buttons of the HUD that get a menu entry. */
 const BUTTONS = ".col .control-icon";
@@ -25,7 +27,7 @@ const FILTER_FROM = 12;
 
 const state = {
   tokenId: null,     // the token the HUD was last opened for
-  open: null,        // the palette whose sub-menu is open
+  open: null,        // the key of the open sub-menu
   filter: "",        // the text in that sub-menu's filter box
   scroll: 0,         // and how far it was scrolled
   observer: null,
@@ -49,6 +51,21 @@ Hooks.once("init", () => {
     name: "DXTCM.Settings.FixedSize.Name", hint: "DXTCM.Settings.FixedSize.Hint",
     scope: "client", config: true, type: Boolean, default: true, onChange: rerender
   });
+
+  // Let users open the menu on tokens they do not own when they can follow or ride them.
+  const Token = foundry.canvas?.placeables?.Token ?? CONFIG.Token.objectClass;
+  const canHUD = Token?.prototype?._canHUD;
+  if (typeof canHUD === "function") {
+    Token.prototype._canHUD = function (user, event) {
+      if (canHUD.call(this, user, event)) return true;
+      try {
+        return user === game.user && game.settings.get(MODULE_ID, "enabled") && hasGuestEntries(this);
+      } catch (err) {
+        console.error(`${MODULE_ID} | ${err}`);
+        return false;
+      }
+    };
+  }
 });
 
 /* -------------------------------------------- */
@@ -69,6 +86,7 @@ Hooks.on("renderTokenHUD", (hud, html) => {
   const tokenId = hud.object?.id ?? null;
   if (tokenId !== state.tokenId) resetState(tokenId);
   root.classList.add("dxtcm-active");
+  root.classList.toggle("dxtcm-guest", isGuest(hud));
 
   // Build once the other renderTokenHUD hooks have added their buttons, and again whenever
   // a module adds or removes one later.
@@ -91,6 +109,20 @@ Hooks.on("canvasPan", () => requestAnimationFrame(() => {
   const menu = root?.querySelector?.(":scope > .dxtcm-menu");
   if (menu) place(root, menu);
 }));
+
+// Follow / ride state and the selection decide some entries: rebuild when they change.
+function rebuildOpenMenu() {
+  const hud = canvas?.tokens?.hud;
+  const root = hud?.element;
+  if (hud?.object && root?.querySelector?.(":scope > .dxtcm-menu")) schedule(hud, root);
+}
+Hooks.on("updateToken", (doc, changes) => { if (changes.flags) rebuildOpenMenu(); });
+Hooks.on("controlToken", rebuildOpenMenu);
+
+/** The user does not own the token: the menu only offers following and riding it. */
+function isGuest(hud) {
+  return !game.user.isGM && !hud.object?.document?.isOwner;
+}
 
 function resetState(tokenId) {
   state.tokenId = tokenId;
@@ -117,53 +149,39 @@ function onMutations(hud, root, mutations) {
 /* -------------------------------------------- */
 
 function collect(hud, root) {
-  const lively = livelyApi(hud);
+  const { entries: extra, replaces } = integrationEntries(hud.object);
   const entries = [];
-  for (const el of root.querySelectorAll(BUTTONS)) {
-    if (el.closest(".palette") || isHidden(el)) continue;
-    if (lively && el.classList.contains("dxlt-hud")) continue;    // replaced by the entry below
-    const key = el.dataset.palette;
-    const palette = key ? root.querySelector(`.palette[data-palette="${CSS.escape(key)}"]`) : null;
-    entries.push({ el, palette, label: labelOf(el), icon: () => iconOf(el) });
+  if (!isGuest(hud)) {
+    for (const el of root.querySelectorAll(BUTTONS)) {
+      if (el.closest(".palette") || isHidden(el)) continue;
+      if (replaces.some(sel => el.matches(sel))) continue;    // replaced by one of our entries
+      const key = el.dataset.palette;
+      const palette = key ? root.querySelector(`.palette[data-palette="${CSS.escape(key)}"]`) : null;
+      const entry = { el, label: labelOf(el), icon: () => iconOf(el) };
+      if (palette) entry.sub = { key: `palette:${key}`, children: () => collectPalette(hud, palette) };
+      entries.push(entry);
+    }
   }
-  if (lively) {
-    entries.push({
-      label: game.i18n.localize("DXTCM.Lively.Label"),
-      icon: () => faIcon("fa-solid fa-ring"),
-      run: () => {
-        const token = hud.object;
-        if (token && !token.controlled) token.control({ releaseOthers: false });
-        lively.open();
-      }
-    });
-  }
-  return entries;
+  return entries.concat(extra);
 }
 
-function collectPalette(palette) {
+function collectPalette(hud, palette) {
   const all = [...palette.querySelectorAll(PALETTE_ITEMS)];
   return all
     .filter(el => !all.some(o => o !== el && o.contains(el)) && !isHidden(el))
     .map(el => {
       const statusId = el.dataset.statusId ?? null;
-      return { el, statusId, label: labelOf(el, statusId), icon: () => iconOf(el) };
+      return {
+        statusId, label: labelOf(el, statusId), icon: () => iconOf(el),
+        isActive: () => el.classList.contains("active"),
+        isOverlay: () => el.classList.contains("overlay"),
+        run: right => activate(hud, el, statusId, right)
+      };
     });
 }
 
 function isHidden(el) {
   return el.hidden || el.style.display === "none";
-}
-
-/** The API of Dxcufgb's lively tokens, if it is active and this user may use it here. */
-function livelyApi(hud) {
-  const mod = game.modules.get(LIVELY_ID);
-  if (!mod?.active || typeof mod.api?.open !== "function") return null;
-  if (!hud.object?.document?.isOwner) return null;
-  let allowed = game.user.isGM;
-  if (!allowed) {
-    try { allowed = game.settings.get(LIVELY_ID, "playersCanUse"); } catch (_) { allowed = true; }
-  }
-  return allowed ? mod.api : null;
 }
 
 /** The description of a button: its tooltip, falling back to whatever else describes it. */
@@ -224,7 +242,11 @@ function build(hud, root) {
   root.querySelector(":scope > .dxtcm-menu")?.remove();
 
   const entries = collect(hud, root);
-  if (state.open && !entries.some(e => e.palette?.dataset.palette === state.open)) state.open = null;
+  if (!entries.length) {
+    hud.close?.();
+    return;
+  }
+  if (state.open && !entries.some(e => e.sub?.key === state.open)) state.open = null;
 
   const menu = document.createElement("nav");
   menu.className = "dxtcm-menu";
@@ -251,17 +273,17 @@ function build(hud, root) {
   const synced = [];
   for (const entry of entries) {
     const item = makeItem(entry);
-    if (entry.el) synced.push([item, entry.el]);
-    if (entry.palette) {
+    if (entry.el) synced.push([item, () => entry.el.classList.contains("active")]);
+    else if (entry.active) synced.push([item, entry.active]);
+    if (entry.sub) {
       item.classList.add("has-sub");
       item.append(faIcon("fa-solid fa-caret-right dxtcm-caret"));
       item.addEventListener("click", ev => {
         ev.preventDefault();
-        const key = entry.palette.dataset.palette;
-        state.open = state.open === key ? null : key;
+        state.open = state.open === entry.sub.key ? null : entry.sub.key;
         state.filter = "";
         state.scroll = 0;
-        openSub(hud, menu, item, entry);
+        openSub(menu, item, entry);
       });
     } else {
       item.addEventListener("click", ev => {
@@ -277,11 +299,11 @@ function build(hud, root) {
     const li = document.createElement("li");
     li.append(item);
     list.append(li);
-    if (entry.palette && entry.palette.dataset.palette === state.open) queueMicrotask(() => openSub(hud, menu, item, entry));
+    if (entry.sub && entry.sub.key === state.open) queueMicrotask(() => openSub(menu, item, entry));
   }
 
   menu._dxtcmSync = () => {
-    for (const [item, el] of synced) item.classList.toggle("active", el.classList.contains("active"));
+    for (const [item, isActive] of synced) item.classList.toggle("active", !!isActive());
     menu._dxtcmSyncSub?.();
   };
   menu._dxtcmSync();
@@ -290,7 +312,7 @@ function build(hud, root) {
   place(root, menu);
 }
 
-function makeItem({ label, icon }) {
+function makeItem({ label, hint, icon }) {
   const item = document.createElement("button");
   item.type = "button";
   item.className = "dxtcm-item";
@@ -300,6 +322,12 @@ function makeItem({ label, icon }) {
   const text = document.createElement("span");
   text.className = "dxtcm-label";
   text.textContent = label;
+  if (hint) {
+    const small = document.createElement("small");
+    small.className = "dxtcm-who";
+    small.textContent = hint;
+    text.append(small);
+  }
   item.append(ic, text);
   return item;
 }
@@ -316,19 +344,19 @@ function press(el, type) {
 }
 
 /* -------------------------------------------- */
-/*  Sub-menus (palettes)                        */
+/*  Sub-menus (palettes, token pickers)         */
 /* -------------------------------------------- */
 
-function openSub(hud, menu, item, entry) {
+function openSub(menu, item, entry) {
   menu.querySelector(":scope > .dxtcm-sub")?.remove();
   menu.querySelectorAll(".dxtcm-item.open").forEach(i => i.classList.remove("open"));
   menu._dxtcmSyncSub = null;
-  if (state.open !== entry.palette.dataset.palette) return;
+  if (state.open !== entry.sub.key) return;
   item.classList.add("open");
 
   const sub = document.createElement("div");
   sub.className = "dxtcm-sub";
-  const children = collectPalette(entry.palette);
+  const children = entry.sub.children();
   const hasStatus = children.some(c => c.statusId);
 
   let filter = null;
@@ -352,8 +380,8 @@ function openSub(hud, menu, item, entry) {
   const rows = [];
   for (const child of children) {
     const btn = makeItem(child);
-    btn.addEventListener("click", ev => { ev.preventDefault(); activate(hud, child, false); });
-    btn.addEventListener("contextmenu", ev => { ev.preventDefault(); activate(hud, child, true); });
+    btn.addEventListener("click", ev => { ev.preventDefault(); child.run(false); });
+    btn.addEventListener("contextmenu", ev => { ev.preventDefault(); child.run(true); });
     const li = document.createElement("li");
     li.append(btn);
     list.append(li);
@@ -382,8 +410,8 @@ function openSub(hud, menu, item, entry) {
 
   menu._dxtcmSyncSub = () => {
     for (const r of rows) {
-      r.btn.classList.toggle("active", r.child.el.classList.contains("active"));
-      r.btn.classList.toggle("overlay", r.child.el.classList.contains("overlay"));
+      r.btn.classList.toggle("active", !!r.child.isActive?.());
+      r.btn.classList.toggle("overlay", !!r.child.isOverlay?.());
     }
   };
   menu._dxtcmSyncSub();
@@ -398,18 +426,18 @@ function openSub(hud, menu, item, entry) {
   }
 }
 
-/** A sub-menu entry: status effects are toggled through the actor, anything else clicks its button. */
-async function activate(hud, child, right) {
+/** A palette entry: status effects are toggled through the actor, anything else clicks its button. */
+async function activate(hud, el, statusId, right) {
   const actor = hud.object?.actor;
-  if (child.statusId && typeof actor?.toggleStatusEffect === "function") {
+  if (statusId && typeof actor?.toggleStatusEffect === "function") {
     try {
-      await actor.toggleStatusEffect(child.statusId, { overlay: right });
+      await actor.toggleStatusEffect(statusId, { overlay: right });
     } catch (err) {
-      console.error(`${MODULE_ID} | could not toggle status effect ${child.statusId}`, err);
+      console.error(`${MODULE_ID} | could not toggle status effect ${statusId}`, err);
     }
     return;
   }
-  press(child.el, right ? "contextmenu" : "click");
+  press(el, right ? "contextmenu" : "click");
 }
 
 /* -------------------------------------------- */
