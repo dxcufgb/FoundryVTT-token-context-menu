@@ -33,6 +33,7 @@ const state = {
   open: null,        // the key of the open sub-menu
   filter: "",        // the text in that sub-menu's filter box
   scroll: 0,         // and how far it was scrolled
+  menuScroll: 0,     // how far the menu itself was scrolled
   selected: null,     // the user's selected tokens when the menu was opened
   observer: null,
   timer: null
@@ -134,6 +135,7 @@ function resetState(tokenId) {
   state.open = null;
   state.filter = "";
   state.scroll = 0;
+  state.menuScroll = 0;
   if (!tokenId) {
     state.selected = null;
     return;
@@ -364,8 +366,15 @@ function build(hud, root) {
   }
 
   const list = document.createElement("ul");
-  list.className = "dxtcm-list";
+  list.className = "dxtcm-list dxtcm-main";
   menu.append(list);
+  // The menu scrolls like the sub-menus; an open sub-menu stays beside its entry.
+  list.addEventListener("scroll", () => {
+    state.menuScroll = list.scrollTop;
+    const open = menu.querySelector(".dxtcm-item.open");
+    const sub = menu.querySelector(":scope > .dxtcm-sub");
+    if (open && sub) placeSub(menu, open, sub);
+  });
 
   const synced = [];
   for (const entry of entries) {
@@ -406,6 +415,7 @@ function build(hud, root) {
   menu._dxtcmSync();
 
   root.append(menu);
+  list.scrollTop = state.menuScroll;
   place(root, menu);
 }
 
@@ -571,8 +581,15 @@ function place(root, menu) {
 
 function placeSub(menu, item, sub) {
   sub.classList.toggle("flip", menu.classList.contains("flip"));
-  sub.style.top = `${item.offsetTop + item.closest("ul").offsetTop}px`;
-  const factor = menu.getBoundingClientRect().height / (menu.offsetHeight || 1);
+  // Beside the entry as it shows now (the menu may be scrolled, and is scaled with the zoom),
+  // kept within the menu's visible list.
+  const ul = item.closest("ul");
+  const m = menu.getBoundingClientRect();
+  const factor = m.height / (menu.offsetHeight || 1);
+  const y = rect => (rect.top - m.top) / (factor || 1) - menu.clientTop;
+  const ulTop = y(ul.getBoundingClientRect());
+  const top = Math.min(Math.max(y(item.getBoundingClientRect()), ulTop), ulTop + ul.clientHeight - item.offsetHeight);
+  sub.style.top = `${Math.max(top, ulTop)}px`;
   let r = sub.getBoundingClientRect();
   if (!sub.classList.contains("flip") && r.right > window.innerWidth - MARGIN) {
     sub.classList.add("flip");
