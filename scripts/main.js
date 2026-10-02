@@ -10,8 +10,11 @@
  * actions, ...) open as sub-menus.
  *
  * Entries for other modules (Dxcufgb's lively tokens, Dxcufgb's token follower, Rideable)
- * come from integrations.js. To follow or ride a token you do not own, the menu also opens
- * on such tokens, then showing only those entries.
+ * come from integrations.js.
+ *
+ * Players cannot open Foundry's Token HUD on tokens they do not own. To follow or ride such a
+ * token they get a separate menu of our own on right-click, holding only those entries: no
+ * bars, HP, effects or anything else of the token.
  */
 
 import { integrationEntries, hasGuestEntries } from "./integrations.js";
@@ -30,9 +33,15 @@ const state = {
   open: null,        // the key of the open sub-menu
   filter: "",        // the text in that sub-menu's filter box
   scroll: 0,         // and how far it was scrolled
+  selected: null,     // the user's selected tokens when the menu was opened
   observer: null,
   timer: null
 };
+
+/** The selection just before the last right-click on the canvas (which changes the selection). */
+let rightDown = null;
+/** The players' menu for a token they do not own: {root, hud, token}. */
+let guest = null;
 
 /* -------------------------------------------- */
 /*  Settings                                    */
@@ -51,21 +60,6 @@ Hooks.once("init", () => {
     name: "DXTCM.Settings.FixedSize.Name", hint: "DXTCM.Settings.FixedSize.Hint",
     scope: "client", config: true, type: Boolean, default: true, onChange: rerender
   });
-
-  // Let users open the menu on tokens they do not own when they can follow or ride them.
-  const Token = foundry.canvas?.placeables?.Token ?? CONFIG.Token.objectClass;
-  const canHUD = Token?.prototype?._canHUD;
-  if (typeof canHUD === "function") {
-    Token.prototype._canHUD = function (user, event) {
-      if (canHUD.call(this, user, event)) return true;
-      try {
-        return user === game.user && game.settings.get(MODULE_ID, "enabled") && hasGuestEntries(this);
-      } catch (err) {
-        console.error(`${MODULE_ID} | ${err}`);
-        return false;
-      }
-    };
-  }
 });
 
 /* -------------------------------------------- */
@@ -83,10 +77,10 @@ Hooks.on("renderTokenHUD", (hud, html) => {
     root.classList.remove("dxtcm-active");
     return;
   }
+  closeGuestMenu();
   const tokenId = hud.object?.id ?? null;
   if (tokenId !== state.tokenId) resetState(tokenId);
   root.classList.add("dxtcm-active");
-  root.classList.toggle("dxtcm-guest", isGuest(hud));
 
   // Build once the other renderTokenHUD hooks have added their buttons, and again whenever
   // a module adds or removes one later.
@@ -98,6 +92,7 @@ Hooks.on("renderTokenHUD", (hud, html) => {
 });
 
 Hooks.on("closeTokenHUD", () => {
+  if (guest) return;
   state.observer?.disconnect();
   clearTimeout(state.timer);
   resetState(null);
@@ -105,23 +100,33 @@ Hooks.on("closeTokenHUD", () => {
 
 // The HUD follows the canvas zoom; keep the menu readable and on screen.
 Hooks.on("canvasPan", () => requestAnimationFrame(() => {
-  const root = canvas?.tokens?.hud?.element;
-  const menu = root?.querySelector?.(":scope > .dxtcm-menu");
-  if (menu) place(root, menu);
+  for (const root of [canvas?.tokens?.hud?.element, guest?.root]) {
+    const menu = root?.querySelector?.(":scope > .dxtcm-menu");
+    if (menu) place(root, menu);
+  }
 }));
 
-// Follow / ride state and the selection decide some entries: rebuild when they change.
-function rebuildOpenMenu() {
+/** The open menu: the players' own one, else the Token HUD's. */
+function openMenu() {
+  if (guest) return guest;
   const hud = canvas?.tokens?.hud;
   const root = hud?.element;
-  if (hud?.object && root?.querySelector?.(":scope > .dxtcm-menu")) schedule(hud, root);
+  if (hud?.object && root?.querySelector?.(":scope > .dxtcm-menu")) return { hud, root };
+  return null;
 }
-Hooks.on("updateToken", (doc, changes) => { if (changes.flags) rebuildOpenMenu(); });
-Hooks.on("controlToken", rebuildOpenMenu);
+
+// Follow / ride state lives in token flags: rebuild when they change.
+Hooks.on("updateToken", (doc, changes) => {
+  if (guest && doc.id === guest.token.id && ("x" in changes || "y" in changes || "hidden" in changes)) return closeGuestMenu();
+  const open = openMenu();
+  if (open && changes.flags) schedule(open.hud, open.root);
+});
+Hooks.on("deleteToken", doc => { if (guest && doc.id === guest.token.id) closeGuestMenu(); });
+Hooks.on("canvasTearDown", () => closeGuestMenu());
 
 /** The user does not own the token: the menu only offers following and riding it. */
 function isGuest(hud) {
-  return !game.user.isGM && !hud.object?.document?.isOwner;
+  return !!hud.guest;
 }
 
 function resetState(tokenId) {
@@ -129,6 +134,97 @@ function resetState(tokenId) {
   state.open = null;
   state.filter = "";
   state.scroll = 0;
+  if (!tokenId) {
+    state.selected = null;
+    return;
+  }
+  // Right-clicking a token selects it and deselects the others, so take the selection from
+  // just before the right-click that opened the menu.
+  const fresh = rightDown && Date.now() - rightDown.time < 1500;
+  state.selected = fresh ? rightDown.docs : (canvas?.tokens?.controlled ?? []).map(t => t.document);
+  rightDown = null;
+}
+
+/* -------------------------------------------- */
+/*  Right-clicks on the canvas                  */
+/* -------------------------------------------- */
+
+const CLICK_PX = 6;      // further than this between press and release is a drag (panning), not a click
+const CLICK_MS = 600;
+
+function isBoard(target) {
+  const view = canvas?.app?.view ?? canvas?.app?.canvas;
+  return !!target && (target === view || target.id === "board");
+}
+
+// Capture phase on the document: runs before Foundry sees the press and changes the selection.
+document.addEventListener("pointerdown", ev => {
+  if (guest && !ev.target?.closest?.("#dxtcm-guest .dxtcm-menu")) closeGuestMenu();
+  if (ev.button !== 2 || !isBoard(ev.target) || !canvas?.ready) return;
+  rightDown = {
+    time: Date.now(), x: ev.clientX, y: ev.clientY,
+    docs: (canvas.tokens?.controlled ?? []).map(t => t.document)
+  };
+}, true);
+
+document.addEventListener("pointerup", ev => {
+  if (ev.button !== 2 || !rightDown || !isBoard(ev.target)) return;
+  if (Math.hypot(ev.clientX - rightDown.x, ev.clientY - rightDown.y) > CLICK_PX) return;
+  if (Date.now() - rightDown.time > CLICK_MS) return;
+  if (game.user.isGM || !game.settings.get(MODULE_ID, "enabled") || !canvas.tokens?.active) return;
+  const token = tokenAt(ev.clientX, ev.clientY);
+  if (!token || token.document.isOwner || !hasGuestEntries(token)) return;
+  openGuestMenu(token);
+}, true);
+
+document.addEventListener("keydown", ev => {
+  if (guest && ev.key === "Escape") closeGuestMenu();
+}, true);
+
+/** The topmost visible token under a point on the screen. */
+function tokenAt(clientX, clientY) {
+  const p = canvas.canvasCoordinatesFromClient?.({ x: clientX, y: clientY })
+    ?? canvas.stage.toLocal({ x: clientX, y: clientY });
+  const hits = canvas.tokens.placeables.filter(t => t.visible && !t.document.hidden
+    && p.x >= t.x && p.x < t.x + t.w && p.y >= t.y && p.y < t.y + t.h);
+  hits.sort((a, b) => (a.document.elevation - b.document.elevation) || ((a.document.sort ?? 0) - (b.document.sort ?? 0)));
+  return hits.at(-1) ?? null;
+}
+
+/* -------------------------------------------- */
+/*  The players' menu on tokens they don't own  */
+/* -------------------------------------------- */
+
+/**
+ * Lives in Foundry's #hud layer, placed over the token like the Token HUD, so it pans and
+ * zooms with the canvas. It shows only the Follow / Ride entries.
+ */
+function openGuestMenu(token) {
+  closeGuestMenu();
+  const layer = document.getElementById("hud");
+  if (!layer) return;
+  if (canvas.tokens.hud?.rendered) canvas.tokens.hud.close();
+  const root = document.createElement("div");
+  root.id = "dxtcm-guest";
+  root.className = "dxtcm-active";
+  Object.assign(root.style, {
+    position: "absolute", left: `${token.x}px`, top: `${token.y}px`,
+    width: `${token.w}px`, height: `${token.h}px`, pointerEvents: "none"
+  });
+  layer.append(root);
+  const hud = { object: token, guest: true, close: () => closeGuestMenu() };
+  guest = { root, hud, token };
+  state.observer?.disconnect();
+  resetState(token.id);
+  build(hud, root);
+}
+
+function closeGuestMenu() {
+  if (!guest) return;
+  clearTimeout(state.timer);
+  guest.root.remove();
+  guest = null;
+  resetState(null);
 }
 
 function schedule(hud, root) {
@@ -149,7 +245,7 @@ function onMutations(hud, root, mutations) {
 /* -------------------------------------------- */
 
 function collect(hud, root) {
-  const { entries: extra, replaces } = integrationEntries(hud.object);
+  const { entries: extra, replaces } = integrationEntries(hud.object, { selected: state.selected, guest: isGuest(hud) });
   const entries = [];
   if (!isGuest(hud)) {
     for (const el of root.querySelectorAll(BUTTONS)) {
@@ -258,7 +354,8 @@ function build(hud, root) {
     if (ev.key === "Enter") ev.preventDefault();
   });
 
-  const name = hud.object?.document?.name ?? hud.object?.name;
+  // Players' menu on someone else's token: no name, they may not be meant to see it.
+  const name = isGuest(hud) ? null : (hud.object?.document?.name ?? hud.object?.name);
   if (name) {
     const header = document.createElement("header");
     header.className = "dxtcm-header";

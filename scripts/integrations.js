@@ -5,8 +5,9 @@
  *  - Rideable: "Ride" (or "Dismount") on tokens marked as rideable.
  *
  * Follow and Ride need a token that does the following / riding. That is, in order:
- * the user's selected tokens, the tokens of the user's own character on the scene, the
- * user's only token on the scene. If none of these decides it (a GM owns every token),
+ * the tokens the user had selected when right-clicking (right-clicking selects the clicked
+ * token and deselects the others, so the menu is handed the selection from before that),
+ * the tokens of the user's own character on the scene, the user's only token on the scene. If none of these decides it (a GM owns every token),
  * the entry opens a sub-menu to pick the token.
  */
 
@@ -23,29 +24,32 @@ const REPLACES = {
 /**
  * Entries for the token's menu, and selectors of HUD buttons they replace.
  * @param {Token} token
+ * @param {object} [opts]
+ * @param {TokenDocument[]} [opts.selected]  the user's selected tokens (default: the current selection)
+ * @param {boolean} [opts.guest]             the user does not own the token: only Follow and Ride
  * @returns {{entries: object[], replaces: string[]}}
  */
-export function integrationEntries(token) {
+export function integrationEntries(token, { selected, guest = false } = {}) {
   const entries = [];
   const replaces = [];
   if (!token?.document) return { entries, replaces };
 
-  const lively = livelyEntry(token);
+  const lively = guest ? null : livelyEntry(token);
   if (lively) { entries.push(lively); replaces.push(REPLACES.lively); }
 
-  entries.push(...followEntries(token));
+  entries.push(...followEntries(token, selected));
 
-  const ride = rideEntry(token);
+  const ride = rideEntry(token, selected);
   if (ride) { entries.push(ride); replaces.push(REPLACES.ride); }
 
   return { entries, replaces };
 }
 
-/** Whether a user who does not own the token still gets a menu for it (to follow or ride it). */
+/** Whether a player who does not own the token still gets a menu for it (to follow or ride it). */
 export function hasGuestEntries(token) {
   if (!token?.document || token.document.isOwner) return false;
-  return !!(followApi() && canFollow(token.document) && ownTokens(token.document).length)
-    || !!(rideApi() && isRideable(token.document) && ownTokens(token.document).length);
+  if (!ownTokens(token.document).length) return false;
+  return !!(followApi() && canFollow(token.document)) || !!(rideApi() && isRideable(token.document));
 }
 
 /* -------------------------------------------- */
@@ -96,7 +100,7 @@ function canFollow(doc) {
   return doc.object?.visible === true;
 }
 
-function followEntries(token) {
+function followEntries(token, selected) {
   const api = followApi();
   if (!api) return [];
   const leader = token.document;
@@ -114,7 +118,7 @@ function followEntries(token) {
   }
 
   if (!canFollow(leader)) return entries;
-  const actors = actingTokens(leader);
+  const actors = actingTokens(leader, selected);
   if (!actors) return entries;
 
   const toggle = async docs => {
@@ -166,11 +170,11 @@ function rides(rider, mount, api) {
   try { return !!api.flags.isRiddenby(mount, rider); } catch (_) { return false; }
 }
 
-function rideEntry(token) {
+function rideEntry(token, selected) {
   const api = rideApi();
   const mount = token.document;
   if (!api || !isRideable(mount)) return null;
-  const actors = actingTokens(mount);
+  const actors = actingTokens(mount, selected);
   if (!actors) return null;
 
   const toggle = docs => api.toggle(docs, mount);
@@ -214,9 +218,9 @@ function ownTokens(target) {
  * The tokens that would follow / ride the target: {direct: docs} when it is clear which,
  * {choices: docs} to let the user pick, or null when the user has no token to use.
  */
-function actingTokens(target) {
-  const selected = (canvas.tokens?.controlled ?? [])
-    .map(t => t.document).filter(d => d.id !== target.id && d.isOwner && d.parent === target.parent);
+function actingTokens(target, selection) {
+  selection ??= (canvas.tokens?.controlled ?? []).map(t => t.document);
+  const selected = selection.filter(d => d && d.id !== target.id && d.isOwner && d.parent === target.parent);
   if (selected.length) return { direct: selected };
   const owned = ownTokens(target);
   if (!owned.length) return null;

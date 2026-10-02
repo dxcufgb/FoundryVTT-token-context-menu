@@ -4,8 +4,8 @@
 .dxtcm-active .col .control-icon,
 .dxtcm-active .palette { display: none !important; }
 
-/* A token the user does not own (opened to follow or ride it): only the menu. */
-.dxtcm-active.dxtcm-guest .col { display: none !important; }
+/* The players' menu on a token they do not own sits on its own, outside the Token HUD. */
+#dxtcm-guest { z-index: 100; }
 
 .dxtcm-menu {
   --dxtcm-bg: rgba(18, 18, 24, 0.96);
