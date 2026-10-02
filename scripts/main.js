@@ -9,12 +9,17 @@
  * and keep working without knowing anything about them. Palettes (status effects, movement
  * actions, ...) open as sub-menus.
  *
- * If Dxcufgb's lively tokens is active, the menu also gets an "Animated token ring" entry
- * that opens that module's ring window.
+ * Entries for other modules (Dxcufgb's lively tokens, Dxcufgb's token follower, Rideable)
+ * come from integrations.js.
+ *
+ * Players cannot open Foundry's Token HUD on tokens they do not own. To follow or ride such a
+ * token they get a separate menu of our own on right-click, holding only those entries: no
+ * bars, HP, effects or anything else of the token.
  */
 
+import { integrationEntries, hasGuestEntries } from "./integrations.js";
+
 const MODULE_ID = "dxcufgbs-token-context-menu";
-const LIVELY_ID = "dxcufgbs-lively-tokens";
 
 /** Buttons of the HUD that get a menu entry. */
 const BUTTONS = ".col .control-icon";
@@ -25,12 +30,19 @@ const FILTER_FROM = 12;
 
 const state = {
   tokenId: null,     // the token the HUD was last opened for
-  open: null,        // the palette whose sub-menu is open
+  open: null,        // the key of the open sub-menu
   filter: "",        // the text in that sub-menu's filter box
   scroll: 0,         // and how far it was scrolled
+  menuScroll: 0,     // how far the menu itself was scrolled
+  selected: null,     // the user's selected tokens when the menu was opened
   observer: null,
   timer: null
 };
+
+/** The selection just before the last right-click on the canvas (which changes the selection). */
+let rightDown = null;
+/** The players' menu for a token they do not own: {root, hud, token}. */
+let guest = null;
 
 /* -------------------------------------------- */
 /*  Settings                                    */
@@ -66,6 +78,7 @@ Hooks.on("renderTokenHUD", (hud, html) => {
     root.classList.remove("dxtcm-active");
     return;
   }
+  closeGuestMenu();
   const tokenId = hud.object?.id ?? null;
   if (tokenId !== state.tokenId) resetState(tokenId);
   root.classList.add("dxtcm-active");
@@ -80,6 +93,7 @@ Hooks.on("renderTokenHUD", (hud, html) => {
 });
 
 Hooks.on("closeTokenHUD", () => {
+  if (guest) return;
   state.observer?.disconnect();
   clearTimeout(state.timer);
   resetState(null);
@@ -87,16 +101,132 @@ Hooks.on("closeTokenHUD", () => {
 
 // The HUD follows the canvas zoom; keep the menu readable and on screen.
 Hooks.on("canvasPan", () => requestAnimationFrame(() => {
-  const root = canvas?.tokens?.hud?.element;
-  const menu = root?.querySelector?.(":scope > .dxtcm-menu");
-  if (menu) place(root, menu);
+  for (const root of [canvas?.tokens?.hud?.element, guest?.root]) {
+    const menu = root?.querySelector?.(":scope > .dxtcm-menu");
+    if (menu) place(root, menu);
+  }
 }));
+
+/** The open menu: the players' own one, else the Token HUD's. */
+function openMenu() {
+  if (guest) return guest;
+  const hud = canvas?.tokens?.hud;
+  const root = hud?.element;
+  if (hud?.object && root?.querySelector?.(":scope > .dxtcm-menu")) return { hud, root };
+  return null;
+}
+
+// Follow / ride state lives in token flags: rebuild when they change.
+Hooks.on("updateToken", (doc, changes) => {
+  if (guest && doc.id === guest.token.id && ("x" in changes || "y" in changes || "hidden" in changes)) return closeGuestMenu();
+  const open = openMenu();
+  if (open && changes.flags) schedule(open.hud, open.root);
+});
+Hooks.on("deleteToken", doc => { if (guest && doc.id === guest.token.id) closeGuestMenu(); });
+Hooks.on("canvasTearDown", () => closeGuestMenu());
+
+/** The user does not own the token: the menu only offers following and riding it. */
+function isGuest(hud) {
+  return !!hud.guest;
+}
 
 function resetState(tokenId) {
   state.tokenId = tokenId;
   state.open = null;
   state.filter = "";
   state.scroll = 0;
+  state.menuScroll = 0;
+  if (!tokenId) {
+    state.selected = null;
+    return;
+  }
+  // Right-clicking a token selects it and deselects the others, so take the selection from
+  // just before the right-click that opened the menu.
+  const fresh = rightDown && Date.now() - rightDown.time < 1500;
+  state.selected = fresh ? rightDown.docs : (canvas?.tokens?.controlled ?? []).map(t => t.document);
+  rightDown = null;
+}
+
+/* -------------------------------------------- */
+/*  Right-clicks on the canvas                  */
+/* -------------------------------------------- */
+
+const CLICK_PX = 6;      // further than this between press and release is a drag (panning), not a click
+const CLICK_MS = 600;
+
+function isBoard(target) {
+  const view = canvas?.app?.view ?? canvas?.app?.canvas;
+  return !!target && (target === view || target.id === "board");
+}
+
+// Capture phase on the document: runs before Foundry sees the press and changes the selection.
+document.addEventListener("pointerdown", ev => {
+  if (guest && !ev.target?.closest?.("#dxtcm-guest .dxtcm-menu")) closeGuestMenu();
+  if (ev.button !== 2 || !isBoard(ev.target) || !canvas?.ready) return;
+  rightDown = {
+    time: Date.now(), x: ev.clientX, y: ev.clientY,
+    docs: (canvas.tokens?.controlled ?? []).map(t => t.document)
+  };
+}, true);
+
+document.addEventListener("pointerup", ev => {
+  if (ev.button !== 2 || !rightDown || !isBoard(ev.target)) return;
+  if (Math.hypot(ev.clientX - rightDown.x, ev.clientY - rightDown.y) > CLICK_PX) return;
+  if (Date.now() - rightDown.time > CLICK_MS) return;
+  if (game.user.isGM || !game.settings.get(MODULE_ID, "enabled") || !canvas.tokens?.active) return;
+  const token = tokenAt(ev.clientX, ev.clientY);
+  if (!token || token.document.isOwner || !hasGuestEntries(token)) return;
+  openGuestMenu(token);
+}, true);
+
+document.addEventListener("keydown", ev => {
+  if (guest && ev.key === "Escape") closeGuestMenu();
+}, true);
+
+/** The topmost visible token under a point on the screen. */
+function tokenAt(clientX, clientY) {
+  const p = canvas.canvasCoordinatesFromClient?.({ x: clientX, y: clientY })
+    ?? canvas.stage.toLocal({ x: clientX, y: clientY });
+  const hits = canvas.tokens.placeables.filter(t => t.visible && !t.document.hidden
+    && p.x >= t.x && p.x < t.x + t.w && p.y >= t.y && p.y < t.y + t.h);
+  hits.sort((a, b) => (a.document.elevation - b.document.elevation) || ((a.document.sort ?? 0) - (b.document.sort ?? 0)));
+  return hits.at(-1) ?? null;
+}
+
+/* -------------------------------------------- */
+/*  The players' menu on tokens they don't own  */
+/* -------------------------------------------- */
+
+/**
+ * Lives in Foundry's #hud layer, placed over the token like the Token HUD, so it pans and
+ * zooms with the canvas. It shows only the Follow / Ride entries.
+ */
+function openGuestMenu(token) {
+  closeGuestMenu();
+  const layer = document.getElementById("hud");
+  if (!layer) return;
+  if (canvas.tokens.hud?.rendered) canvas.tokens.hud.close();
+  const root = document.createElement("div");
+  root.id = "dxtcm-guest";
+  root.className = "dxtcm-active";
+  Object.assign(root.style, {
+    position: "absolute", left: `${token.x}px`, top: `${token.y}px`,
+    width: `${token.w}px`, height: `${token.h}px`, pointerEvents: "none"
+  });
+  layer.append(root);
+  const hud = { object: token, guest: true, close: () => closeGuestMenu() };
+  guest = { root, hud, token };
+  state.observer?.disconnect();
+  resetState(token.id);
+  build(hud, root);
+}
+
+function closeGuestMenu() {
+  if (!guest) return;
+  clearTimeout(state.timer);
+  guest.root.remove();
+  guest = null;
+  resetState(null);
 }
 
 function schedule(hud, root) {
@@ -117,53 +247,39 @@ function onMutations(hud, root, mutations) {
 /* -------------------------------------------- */
 
 function collect(hud, root) {
-  const lively = livelyApi(hud);
+  const { entries: extra, replaces } = integrationEntries(hud.object, { selected: state.selected, guest: isGuest(hud) });
   const entries = [];
-  for (const el of root.querySelectorAll(BUTTONS)) {
-    if (el.closest(".palette") || isHidden(el)) continue;
-    if (lively && el.classList.contains("dxlt-hud")) continue;    // replaced by the entry below
-    const key = el.dataset.palette;
-    const palette = key ? root.querySelector(`.palette[data-palette="${CSS.escape(key)}"]`) : null;
-    entries.push({ el, palette, label: labelOf(el), icon: () => iconOf(el) });
+  if (!isGuest(hud)) {
+    for (const el of root.querySelectorAll(BUTTONS)) {
+      if (el.closest(".palette") || isHidden(el)) continue;
+      if (replaces.some(sel => el.matches(sel))) continue;    // replaced by one of our entries
+      const key = el.dataset.palette;
+      const palette = key ? root.querySelector(`.palette[data-palette="${CSS.escape(key)}"]`) : null;
+      const entry = { el, label: labelOf(el), icon: () => iconOf(el) };
+      if (palette) entry.sub = { key: `palette:${key}`, children: () => collectPalette(hud, palette) };
+      entries.push(entry);
+    }
   }
-  if (lively) {
-    entries.push({
-      label: game.i18n.localize("DXTCM.Lively.Label"),
-      icon: () => faIcon("fa-solid fa-ring"),
-      run: () => {
-        const token = hud.object;
-        if (token && !token.controlled) token.control({ releaseOthers: false });
-        lively.open();
-      }
-    });
-  }
-  return entries;
+  return entries.concat(extra);
 }
 
-function collectPalette(palette) {
+function collectPalette(hud, palette) {
   const all = [...palette.querySelectorAll(PALETTE_ITEMS)];
   return all
     .filter(el => !all.some(o => o !== el && o.contains(el)) && !isHidden(el))
     .map(el => {
       const statusId = el.dataset.statusId ?? null;
-      return { el, statusId, label: labelOf(el, statusId), icon: () => iconOf(el) };
+      return {
+        statusId, label: labelOf(el, statusId), icon: () => iconOf(el),
+        isActive: () => el.classList.contains("active"),
+        isOverlay: () => el.classList.contains("overlay"),
+        run: right => activate(hud, el, statusId, right)
+      };
     });
 }
 
 function isHidden(el) {
   return el.hidden || el.style.display === "none";
-}
-
-/** The API of Dxcufgb's lively tokens, if it is active and this user may use it here. */
-function livelyApi(hud) {
-  const mod = game.modules.get(LIVELY_ID);
-  if (!mod?.active || typeof mod.api?.open !== "function") return null;
-  if (!hud.object?.document?.isOwner) return null;
-  let allowed = game.user.isGM;
-  if (!allowed) {
-    try { allowed = game.settings.get(LIVELY_ID, "playersCanUse"); } catch (_) { allowed = true; }
-  }
-  return allowed ? mod.api : null;
 }
 
 /** The description of a button: its tooltip, falling back to whatever else describes it. */
@@ -224,7 +340,11 @@ function build(hud, root) {
   root.querySelector(":scope > .dxtcm-menu")?.remove();
 
   const entries = collect(hud, root);
-  if (state.open && !entries.some(e => e.palette?.dataset.palette === state.open)) state.open = null;
+  if (!entries.length) {
+    hud.close?.();
+    return;
+  }
+  if (state.open && !entries.some(e => e.sub?.key === state.open)) state.open = null;
 
   const menu = document.createElement("nav");
   menu.className = "dxtcm-menu";
@@ -236,7 +356,8 @@ function build(hud, root) {
     if (ev.key === "Enter") ev.preventDefault();
   });
 
-  const name = hud.object?.document?.name ?? hud.object?.name;
+  // Players' menu on someone else's token: no name, they may not be meant to see it.
+  const name = isGuest(hud) ? null : (hud.object?.document?.name ?? hud.object?.name);
   if (name) {
     const header = document.createElement("header");
     header.className = "dxtcm-header";
@@ -245,23 +366,30 @@ function build(hud, root) {
   }
 
   const list = document.createElement("ul");
-  list.className = "dxtcm-list";
+  list.className = "dxtcm-list dxtcm-main";
   menu.append(list);
+  // The menu scrolls like the sub-menus; an open sub-menu stays beside its entry.
+  list.addEventListener("scroll", () => {
+    state.menuScroll = list.scrollTop;
+    const open = menu.querySelector(".dxtcm-item.open");
+    const sub = menu.querySelector(":scope > .dxtcm-sub");
+    if (open && sub) placeSub(menu, open, sub);
+  });
 
   const synced = [];
   for (const entry of entries) {
     const item = makeItem(entry);
-    if (entry.el) synced.push([item, entry.el]);
-    if (entry.palette) {
+    if (entry.el) synced.push([item, () => entry.el.classList.contains("active")]);
+    else if (entry.active) synced.push([item, entry.active]);
+    if (entry.sub) {
       item.classList.add("has-sub");
       item.append(faIcon("fa-solid fa-caret-right dxtcm-caret"));
       item.addEventListener("click", ev => {
         ev.preventDefault();
-        const key = entry.palette.dataset.palette;
-        state.open = state.open === key ? null : key;
+        state.open = state.open === entry.sub.key ? null : entry.sub.key;
         state.filter = "";
         state.scroll = 0;
-        openSub(hud, menu, item, entry);
+        openSub(menu, item, entry);
       });
     } else {
       item.addEventListener("click", ev => {
@@ -277,20 +405,21 @@ function build(hud, root) {
     const li = document.createElement("li");
     li.append(item);
     list.append(li);
-    if (entry.palette && entry.palette.dataset.palette === state.open) queueMicrotask(() => openSub(hud, menu, item, entry));
+    if (entry.sub && entry.sub.key === state.open) queueMicrotask(() => openSub(menu, item, entry));
   }
 
   menu._dxtcmSync = () => {
-    for (const [item, el] of synced) item.classList.toggle("active", el.classList.contains("active"));
+    for (const [item, isActive] of synced) item.classList.toggle("active", !!isActive());
     menu._dxtcmSyncSub?.();
   };
   menu._dxtcmSync();
 
   root.append(menu);
+  list.scrollTop = state.menuScroll;
   place(root, menu);
 }
 
-function makeItem({ label, icon }) {
+function makeItem({ label, hint, icon }) {
   const item = document.createElement("button");
   item.type = "button";
   item.className = "dxtcm-item";
@@ -300,6 +429,12 @@ function makeItem({ label, icon }) {
   const text = document.createElement("span");
   text.className = "dxtcm-label";
   text.textContent = label;
+  if (hint) {
+    const small = document.createElement("small");
+    small.className = "dxtcm-who";
+    small.textContent = hint;
+    text.append(small);
+  }
   item.append(ic, text);
   return item;
 }
@@ -316,19 +451,19 @@ function press(el, type) {
 }
 
 /* -------------------------------------------- */
-/*  Sub-menus (palettes)                        */
+/*  Sub-menus (palettes, token pickers)         */
 /* -------------------------------------------- */
 
-function openSub(hud, menu, item, entry) {
+function openSub(menu, item, entry) {
   menu.querySelector(":scope > .dxtcm-sub")?.remove();
   menu.querySelectorAll(".dxtcm-item.open").forEach(i => i.classList.remove("open"));
   menu._dxtcmSyncSub = null;
-  if (state.open !== entry.palette.dataset.palette) return;
+  if (state.open !== entry.sub.key) return;
   item.classList.add("open");
 
   const sub = document.createElement("div");
   sub.className = "dxtcm-sub";
-  const children = collectPalette(entry.palette);
+  const children = entry.sub.children();
   const hasStatus = children.some(c => c.statusId);
 
   let filter = null;
@@ -352,8 +487,8 @@ function openSub(hud, menu, item, entry) {
   const rows = [];
   for (const child of children) {
     const btn = makeItem(child);
-    btn.addEventListener("click", ev => { ev.preventDefault(); activate(hud, child, false); });
-    btn.addEventListener("contextmenu", ev => { ev.preventDefault(); activate(hud, child, true); });
+    btn.addEventListener("click", ev => { ev.preventDefault(); child.run(false); });
+    btn.addEventListener("contextmenu", ev => { ev.preventDefault(); child.run(true); });
     const li = document.createElement("li");
     li.append(btn);
     list.append(li);
@@ -382,8 +517,8 @@ function openSub(hud, menu, item, entry) {
 
   menu._dxtcmSyncSub = () => {
     for (const r of rows) {
-      r.btn.classList.toggle("active", r.child.el.classList.contains("active"));
-      r.btn.classList.toggle("overlay", r.child.el.classList.contains("overlay"));
+      r.btn.classList.toggle("active", !!r.child.isActive?.());
+      r.btn.classList.toggle("overlay", !!r.child.isOverlay?.());
     }
   };
   menu._dxtcmSyncSub();
@@ -398,18 +533,18 @@ function openSub(hud, menu, item, entry) {
   }
 }
 
-/** A sub-menu entry: status effects are toggled through the actor, anything else clicks its button. */
-async function activate(hud, child, right) {
+/** A palette entry: status effects are toggled through the actor, anything else clicks its button. */
+async function activate(hud, el, statusId, right) {
   const actor = hud.object?.actor;
-  if (child.statusId && typeof actor?.toggleStatusEffect === "function") {
+  if (statusId && typeof actor?.toggleStatusEffect === "function") {
     try {
-      await actor.toggleStatusEffect(child.statusId, { overlay: right });
+      await actor.toggleStatusEffect(statusId, { overlay: right });
     } catch (err) {
-      console.error(`${MODULE_ID} | could not toggle status effect ${child.statusId}`, err);
+      console.error(`${MODULE_ID} | could not toggle status effect ${statusId}`, err);
     }
     return;
   }
-  press(child.el, right ? "contextmenu" : "click");
+  press(el, right ? "contextmenu" : "click");
 }
 
 /* -------------------------------------------- */
@@ -446,8 +581,15 @@ function place(root, menu) {
 
 function placeSub(menu, item, sub) {
   sub.classList.toggle("flip", menu.classList.contains("flip"));
-  sub.style.top = `${item.offsetTop + item.closest("ul").offsetTop}px`;
-  const factor = menu.getBoundingClientRect().height / (menu.offsetHeight || 1);
+  // Beside the entry as it shows now (the menu may be scrolled, and is scaled with the zoom),
+  // kept within the menu's visible list.
+  const ul = item.closest("ul");
+  const m = menu.getBoundingClientRect();
+  const factor = m.height / (menu.offsetHeight || 1);
+  const y = rect => (rect.top - m.top) / (factor || 1) - menu.clientTop;
+  const ulTop = y(ul.getBoundingClientRect());
+  const top = Math.min(Math.max(y(item.getBoundingClientRect()), ulTop), ulTop + ul.clientHeight - item.offsetHeight);
+  sub.style.top = `${Math.max(top, ulTop)}px`;
   let r = sub.getBoundingClientRect();
   if (!sub.classList.contains("flip") && r.right > window.innerWidth - MARGIN) {
     sub.classList.add("flip");

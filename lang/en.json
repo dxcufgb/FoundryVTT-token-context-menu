@@ -18,6 +18,15 @@
     },
     "Lively": {
       "Label": "Animated token ring"
+    },
+    "Follow": {
+      "Label": "Follow this token",
+      "StopThis": "Stop following this token",
+      "Stop": "Stop following {name}"
+    },
+    "Ride": {
+      "Label": "Ride",
+      "Dismount": "Dismount"
     }
   }
 }

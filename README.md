@@ -21,12 +21,7 @@ https://github.com/dxcufgb/FoundryVTT-token-context-menu/releases/latest/downloa
 - The elevation field and resource bars stay where they are.
 - The menu opens beside the token, flips to the other side near the screen edge and keeps the same size on screen whatever the zoom (can be turned off).
 - **[Dxcufgb's lively tokens](https://github.com/dxcufgb/FoundryVTT-lively-tokens):** if it is active, the menu gets an **Animated token ring** entry that opens its ring window for the token (in place of its HUD button).
-
-## Settings
-
-- **Token context menu** (per user): turn it off to get Foundry's plain icons back on this computer.
-- **Keep menu size when zooming** (per user): on by default.
-
-## License
-
-Code: [MIT](LICENSE).
+- **[Dxcufgb's token follower](https://github.com/dxcufgb/FoundryVTT-token-follower):** if it is active, the menu gets **Follow this token** (or **Stop following this token**). GMs get it on every token; players on the friendly tokens they can see.
+- **[Rideable](https://github.com/Saibot393/Rideable):** if it is active, rideable tokens get **Ride** (or **Dismount**), in place of Rideable's own HUD button.
+- **Players on tokens they don't own:** right-click the token to get a small menu with only **Follow this token** / **Ride**. It shows nothing else of the token (no name, bars, HP or effects).
+- Who follows or rides: the tokens you had selected when you right-clicked (right-clicking selects the clicked token, the menu remembers the selection from before), else your character's token on the scene, else your only token there. If that doesn't settle it (a GM owns every token), the entry opens a list to pick the token from.

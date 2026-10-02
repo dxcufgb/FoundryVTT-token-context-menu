@@ -4,6 +4,9 @@
 .dxtcm-active .col .control-icon,
 .dxtcm-active .palette { display: none !important; }
 
+/* The players' menu on a token they do not own sits on its own, outside the Token HUD. */
+#dxtcm-guest { z-index: 100; }
+
 .dxtcm-menu {
   --dxtcm-bg: rgba(18, 18, 24, 0.96);
   --dxtcm-border: var(--color-border-dark-highlight, rgba(255, 255, 255, 0.18));
@@ -15,8 +18,8 @@
   top: 0;
   left: calc(100% + 12px);
   z-index: 10;
-  min-width: 13rem;
-  max-width: 20rem;
+  min-width: 15rem;
+  max-width: 22rem;
   padding: 0.25rem;
   pointer-events: auto;
   transform-origin: top left;
@@ -45,6 +48,8 @@
 }
 
 .dxtcm-menu .dxtcm-list { list-style: none; margin: 0; padding: 0; }
+/* Long menus scroll, like the sub-menus. */
+.dxtcm-menu .dxtcm-main { max-height: min(60vh, 24rem); overflow-y: auto; overscroll-behavior: contain; }
 .dxtcm-menu .dxtcm-list li { margin: 0; padding: 0; }
 .dxtcm-menu .dxtcm-list li[hidden] { display: none; }
 
@@ -53,7 +58,10 @@
   align-items: center;
   gap: 0.55rem;
   width: 100%;
+  height: auto;             /* Foundry gives buttons a fixed height; entries grow with their text */
   min-height: 2rem;
+  max-height: none;
+  overflow: visible;
   margin: 0;
   padding: 0.2rem 0.5rem;
   border: 1px solid transparent;
@@ -62,7 +70,10 @@
   box-shadow: none;
   color: inherit;
   font: inherit;
+  font-size: var(--font-size-14, 14px);
+  line-height: 1.2;
   text-align: left;
+  white-space: normal;
   cursor: pointer;
 }
 .dxtcm-menu .dxtcm-item:hover,
@@ -92,7 +103,8 @@
 }
 .dxtcm-menu .dxtcm-icon i { margin: 0; }
 
-.dxtcm-menu .dxtcm-label { flex: 1; white-space: normal; }
+.dxtcm-menu .dxtcm-label { flex: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.dxtcm-menu .dxtcm-who { display: block; font-size: var(--font-size-11, 11px); opacity: 0.6; }
 .dxtcm-menu .dxtcm-caret { flex: 0 0 auto; opacity: 0.6; }
 .dxtcm-menu.flip .dxtcm-caret { transform: rotate(180deg); order: -1; }
 
@@ -108,7 +120,7 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
 }
 .dxtcm-menu .dxtcm-sub.flip { left: auto; right: calc(100% + 4px); }
-.dxtcm-menu .dxtcm-sub .dxtcm-list { max-height: min(60vh, 28rem); overflow-y: auto; }
+.dxtcm-menu .dxtcm-sub .dxtcm-list { max-height: min(60vh, 28rem); overflow-y: auto; overscroll-behavior: contain; }
 .dxtcm-menu .dxtcm-sub .dxtcm-item { min-height: 1.8rem; }
 
 .dxtcm-menu .dxtcm-filter {
