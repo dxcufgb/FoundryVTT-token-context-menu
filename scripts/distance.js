@@ -47,7 +47,7 @@ Hooks.on("canvasTearDown", () => hide());
 function activeToken() {
   const controlled = canvas?.tokens?.controlled?.[0];
   if (controlled) return controlled;
-  return game.user.character?.getActiveTokens(true)?.[0] ?? null;
+  return game.user.character?.getActiveTokens()?.[0] ?? null;
 }
 
 function show(token) {
