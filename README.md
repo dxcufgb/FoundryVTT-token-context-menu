@@ -25,3 +25,7 @@ https://github.com/dxcufgb/FoundryVTT-token-context-menu/releases/latest/downloa
 - **[Rideable](https://github.com/Saibot393/Rideable):** if it is active, rideable tokens get **Ride** (or **Dismount**), in place of Rideable's own HUD button.
 - **Players on tokens they don't own:** right-click the token to get a small menu with only **Follow this token** / **Ride**. It shows nothing else of the token (no name, bars, HP or effects).
 - Who follows or rides: the tokens you had selected when you right-clicked (right-clicking selects the clicked token, the menu remembers the selection from before), else your character's token on the scene, else your only token there. If that doesn't settle it (a GM owns every token), the entry opens a list to pick the token from.
+
+## Releasing
+
+For the maintainer: **Actions → Release module → Run workflow**, type the version (for example `1.2.3`) and run it. The module is checked and packaged first; only then is the release `v1.2.3` published with `module.json` and `module.zip`. CI and releases come from [dxcufgb/foundry-module-ci](https://github.com/dxcufgb/foundry-module-ci), the same for every module.
