@@ -2,8 +2,9 @@
  * Distance on hover.
  *
  * While the mouse is over a token, a small label next to the cursor shows the distance from
- * the user's active token to it, measured from token centre to token centre with the scene's
- * grid rules and units. The active token is the user's first selected token, else their
+ * the user's active token to it, measured centre to centre with the scene's grid rules and
+ * units. A token bigger than one grid space is measured from the centre of its space closest
+ * to the other token. The active token is the user's first selected token, else their
  * character's token on the scene. Every user turns it on or off for themselves.
  */
 
@@ -70,7 +71,7 @@ function update() {
     label = null;
     return;
   }
-  const distance = canvas.grid.measurePath([from.center, hovered.center]).distance;
+  const distance = closestDistance(centres(from), centres(hovered));
   const units = canvas.grid.units || canvas.scene?.grid?.units || "";
   const value = (Math.round(distance * 100) / 100).toLocaleString(game.i18n.lang);
   if (!label) {
@@ -80,6 +81,30 @@ function update() {
   }
   label.textContent = units ? `${value} ${units}` : value;
   place();
+}
+
+/** The points a token is measured from: the centre of each grid space it covers if it is bigger
+ * than one space, else its own centre. */
+function centres(token) {
+  const { width, height } = token.document;
+  const grid = canvas.grid;
+  if ((width <= 1 && height <= 1) || grid.isGridless || !token.document.getOccupiedGridSpaceOffsets) {
+    return [token.center];
+  }
+  const offsets = token.document.getOccupiedGridSpaceOffsets();
+  if (!offsets?.length) return [token.center];
+  return offsets.map(offset => grid.getCenterPoint(offset));
+}
+
+/** The shortest distance between any point of one list and any point of the other. */
+function closestDistance(from, to) {
+  let best = Infinity;
+  for (const a of from) {
+    for (const b of to) {
+      best = Math.min(best, canvas.grid.measurePath([a, b]).distance);
+    }
+  }
+  return best;
 }
 
 /** Put the label next to the cursor, keeping it on screen. */

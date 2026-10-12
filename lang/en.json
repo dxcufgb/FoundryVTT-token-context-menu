@@ -11,7 +11,7 @@
       },
       "DistanceOnHover": {
         "Name": "Distance on hover",
-        "Hint": "While the mouse is over a token, show the distance from your active token (your selected token, else your character's token) to it next to the cursor, measured from centre to centre. Each player and the GM turn it on or off for themselves."
+        "Hint": "While the mouse is over a token, show the distance from your active token (your selected token, else your character's token) to it next to the cursor, measured from centre to centre (for large tokens, from the centre of their closest square). Each player and the GM turn it on or off for themselves."
       }
     },
     "Menu": {
