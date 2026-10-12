@@ -4,7 +4,7 @@
  * While the mouse is over a token, a small label next to the cursor shows the distance from
  * the user's active token to it, measured from token centre to token centre with the scene's
  * grid rules and units. The active token is the user's first selected token, else their
- * character's token on the scene. A world setting turns it on or off for everybody.
+ * character's token on the scene. Every user turns it on or off for themselves.
  */
 
 const MODULE_ID = "dxcufgbs-token-context-menu";
@@ -21,7 +21,7 @@ const pointer = { x: 0, y: 0 };
 Hooks.once("init", () => {
   game.settings.register(MODULE_ID, "distanceOnHover", {
     name: "DXTCM.Settings.DistanceOnHover.Name", hint: "DXTCM.Settings.DistanceOnHover.Hint",
-    scope: "world", config: true, type: Boolean, default: true, onChange: () => hide()
+    scope: "user", config: true, type: Boolean, default: true, onChange: () => hide()
   });
   document.addEventListener("pointermove", event => {
     pointer.x = event.clientX;
