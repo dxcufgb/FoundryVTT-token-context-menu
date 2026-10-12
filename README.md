@@ -25,6 +25,7 @@ https://github.com/dxcufgb/FoundryVTT-token-context-menu/releases/latest/downloa
 - **[Rideable](https://github.com/Saibot393/Rideable):** if it is active, rideable tokens get **Ride** (or **Dismount**), in place of Rideable's own HUD button.
 - **Players on tokens they don't own:** right-click the token to get a small menu with only **Follow this token** / **Ride**. It shows nothing else of the token (no name, bars, HP or effects).
 - Who follows or rides: the tokens you had selected when you right-clicked (right-clicking selects the clicked token, the menu remembers the selection from before), else your character's token on the scene, else your only token there. If that doesn't settle it (a GM owns every token), the entry opens a list to pick the token from.
+- **Distance on hover:** while the mouse is over a token, a label next to the cursor shows how far it is from your active token (your selected token, else your character's token on the scene), measured from centre to centre in the scene's units. The GM turns it on or off for all players with the **Distance on hover** setting.
 
 ## Releasing
 

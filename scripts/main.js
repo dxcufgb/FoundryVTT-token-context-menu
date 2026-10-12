@@ -18,6 +18,7 @@
  */
 
 import { integrationEntries, hasGuestEntries } from "./integrations.js";
+import "./distance.js";
 
 const MODULE_ID = "dxcufgbs-token-context-menu";
 

@@ -8,6 +8,10 @@
       "FixedSize": {
         "Name": "Keep menu size when zooming",
         "Hint": "The menu keeps the same size on screen whatever the canvas zoom. Off: it grows and shrinks with the map, like Foundry's own icons."
+      },
+      "DistanceOnHover": {
+        "Name": "Distance on hover",
+        "Hint": "For every player: while the mouse is over a token, show the distance from your active token (your selected token, else your character's token) to it next to the cursor, measured from centre to centre."
       }
     },
     "Menu": {

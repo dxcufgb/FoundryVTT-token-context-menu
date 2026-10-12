@@ -1,0 +1,95 @@
+/**
+ * Distance on hover.
+ *
+ * While the mouse is over a token, a small label next to the cursor shows the distance from
+ * the user's active token to it, measured from token centre to token centre with the scene's
+ * grid rules and units. The active token is the user's first selected token, else their
+ * character's token on the scene. A world setting turns it on or off for everybody.
+ */
+
+const MODULE_ID = "dxcufgbs-token-context-menu";
+/** Distance of the label from the cursor, in pixels. */
+const OFFSET = 16;
+
+/** The token under the mouse, while the label is shown for it. */
+let hovered = null;
+/** The label element. */
+let label = null;
+/** The last pointer position on screen. */
+const pointer = { x: 0, y: 0 };
+
+Hooks.once("init", () => {
+  game.settings.register(MODULE_ID, "distanceOnHover", {
+    name: "DXTCM.Settings.DistanceOnHover.Name", hint: "DXTCM.Settings.DistanceOnHover.Hint",
+    scope: "world", config: true, type: Boolean, default: true, onChange: () => hide()
+  });
+  document.addEventListener("pointermove", event => {
+    pointer.x = event.clientX;
+    pointer.y = event.clientY;
+    if (hovered) place();
+  }, { passive: true });
+});
+
+Hooks.on("hoverToken", (token, hover) => {
+  if (hover) show(token);
+  else if (token === hovered) hide();
+});
+
+// Keep the number right while either token moves or the selection changes.
+Hooks.on("refreshToken", token => {
+  if (hovered && (token === hovered || token === activeToken())) update();
+});
+Hooks.on("controlToken", () => { if (hovered) update(); });
+Hooks.on("deleteToken", doc => { if (hovered?.document === doc) hide(); });
+Hooks.on("canvasTearDown", () => hide());
+
+/** The token distances are measured from: the first selected one, else the user's character's. */
+function activeToken() {
+  const controlled = canvas?.tokens?.controlled?.[0];
+  if (controlled) return controlled;
+  return game.user.character?.getActiveTokens(true)?.[0] ?? null;
+}
+
+function show(token) {
+  if (!game.settings.get(MODULE_ID, "distanceOnHover")) return;
+  hovered = token;
+  update();
+}
+
+function hide() {
+  hovered = null;
+  label?.remove();
+  label = null;
+}
+
+/** Measure again and show or hide the label. */
+function update() {
+  const from = activeToken();
+  if (!hovered || !from || from === hovered || !canvas?.grid) {
+    label?.remove();
+    label = null;
+    return;
+  }
+  const distance = canvas.grid.measurePath([from.center, hovered.center]).distance;
+  const units = canvas.grid.units || canvas.scene?.grid?.units || "";
+  const value = (Math.round(distance * 100) / 100).toLocaleString(game.i18n.lang);
+  if (!label) {
+    label = document.createElement("div");
+    label.id = "dxtcm-distance";
+    document.body.append(label);
+  }
+  label.textContent = units ? `${value} ${units}` : value;
+  place();
+}
+
+/** Put the label next to the cursor, keeping it on screen. */
+function place() {
+  if (!label) return;
+  const { width, height } = label.getBoundingClientRect();
+  let x = pointer.x + OFFSET;
+  let y = pointer.y + OFFSET;
+  if (x + width > window.innerWidth) x = pointer.x - OFFSET - width;
+  if (y + height > window.innerHeight) y = pointer.y - OFFSET - height;
+  label.style.left = `${Math.max(0, x)}px`;
+  label.style.top = `${Math.max(0, y)}px`;
+}
