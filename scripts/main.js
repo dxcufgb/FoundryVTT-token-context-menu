@@ -561,6 +561,7 @@ function place(root, menu) {
   menu.style.transform = `scale(${scale})`;
   menu.style.top = "0px";
   menu.classList.remove("flip");
+  fit(menu);
 
   let r = menu.getBoundingClientRect();
   if (r.right > window.innerWidth - MARGIN) {
@@ -578,6 +579,24 @@ function place(root, menu) {
   const item = menu.querySelector(".dxtcm-item.open");
   const sub = menu.querySelector(":scope > .dxtcm-sub");
   if (item && sub) placeSub(menu, item, sub);
+}
+
+/**
+ * The list scrolls once the menu would be taller than the screen. Its CSS max-height is in the
+ * menu's own pixels, which the zoom scales, so the limit is measured on screen and taken back.
+ * The menu never gets shorter than its minimum height.
+ */
+function fit(menu) {
+  const list = menu.querySelector(":scope > .dxtcm-main");
+  if (!list) return;
+  list.style.maxHeight = "";
+  const r = menu.getBoundingClientRect();
+  const factor = r.height / (menu.offsetHeight || 1) || 1;        // menu px -> screen px
+  const over = (r.height - (window.innerHeight - 2 * MARGIN)) / factor;
+  if (over <= 0) return;
+  const chrome = menu.offsetHeight - list.offsetHeight;           // header, padding, borders
+  const min = (parseFloat(getComputedStyle(menu).minHeight) || 0) - chrome;
+  list.style.maxHeight = `${Math.max(list.offsetHeight - over, min, 0)}px`;
 }
 
 function placeSub(menu, item, sub) {
