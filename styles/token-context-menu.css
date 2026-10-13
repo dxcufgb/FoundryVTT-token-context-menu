@@ -20,9 +20,8 @@
   z-index: 10;
   display: flex;
   flex-direction: column;
-  min-width: 15rem;
-  max-width: 22rem;
-  min-height: 12vw;         /* never a stub: the list fills the rest (and scrolls when it is long) */
+  width: 12vw;
+  min-height: 24vh;         /* never a stub: the list fills the rest (and scrolls when it is long) */
   padding: 0.25rem;
   pointer-events: auto;
   transform-origin: top left;

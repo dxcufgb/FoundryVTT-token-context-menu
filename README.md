@@ -20,7 +20,7 @@ https://github.com/dxcufgb/FoundryVTT-token-context-menu/releases/latest/downloa
   - Status effects: left-click toggles, right-click toggles it as a large overlay (marked ★).
 - The elevation field and resource bars stay where they are.
 - The menu opens beside the token, flips to the other side near the screen edge and keeps the same size on screen whatever the zoom (can be turned off).
-- The menu is at least 12% of the window's width tall; when its entries don't fit on screen it scrolls, like the status effects sub-menu (without the filter box).
+- The menu is 12% of the window's width wide and at least 24% of its height tall; when its entries don't fit on screen it scrolls, like the status effects sub-menu (without the filter box).
 - **[Dxcufgb's lively tokens](https://github.com/dxcufgb/FoundryVTT-lively-tokens):** if it is active, the menu gets an **Animated token ring** entry that opens its ring window for the token (in place of its HUD button).
 - **[Dxcufgb's token follower](https://github.com/dxcufgb/FoundryVTT-token-follower):** if it is active, the menu gets **Follow this token** (or **Stop following this token**). GMs get it on every token; players on the friendly tokens they can see.
 - **[Rideable](https://github.com/Saibot393/Rideable):** if it is active, rideable tokens get **Ride** (or **Dismount**), in place of Rideable's own HUD button.
