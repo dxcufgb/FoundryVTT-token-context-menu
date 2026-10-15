@@ -59,7 +59,7 @@ export function hasGuestEntries(token) {
 /* -------------------------------------------- */
 
 function livelyEntry(token) {
-  const mod = game.modules.get(LIVELY_ID);
+  const mod = game.modules?.get(LIVELY_ID);
   if (!mod?.active || typeof mod.api?.open !== "function") return null;
   if (!token.document.isOwner) return null;
   let allowed = game.user.isGM;
@@ -72,7 +72,7 @@ function livelyEntry(token) {
     icon: () => faIcon("fa-solid fa-ring"),
     run: () => {
       if (!token.controlled) token.control({ releaseOthers: false });
-      mod.api.open();
+      call(() => mod.api.open());
     }
   };
 }
