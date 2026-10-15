@@ -1,5 +1,6 @@
 /**
- * Menu entries for other modules, shown when they are active in the world:
+ * Menu entries for other modules, shown when they are active in the world. All of them are
+ * optional: a module that is not installed, inactive or broken just adds no entry.
  *  - Dxcufgb's lively tokens: "Animated token ring" opens its ring window.
  *  - Dxcufgb's token follower: "Follow this token".
  *  - Rideable: "Ride" (or "Dismount") on tokens marked as rideable.
@@ -34,12 +35,12 @@ export function integrationEntries(token, { selected, guest = false } = {}) {
   const replaces = [];
   if (!token?.document) return { entries, replaces };
 
-  const lively = guest ? null : livelyEntry(token);
+  const lively = guest ? null : attempt(() => livelyEntry(token), null);
   if (lively) { entries.push(lively); replaces.push(REPLACES.lively); }
 
-  entries.push(...followEntries(token, selected));
+  entries.push(...attempt(() => followEntries(token, selected), []));
 
-  const ride = rideEntry(token, selected);
+  const ride = attempt(() => rideEntry(token, selected), null);
   if (ride) { entries.push(ride); replaces.push(REPLACES.ride); }
 
   return { entries, replaces };
@@ -49,7 +50,8 @@ export function integrationEntries(token, { selected, guest = false } = {}) {
 export function hasGuestEntries(token) {
   if (!token?.document || token.document.isOwner) return false;
   if (!ownTokens(token.document).length) return false;
-  return !!(followApi() && canFollow(token.document)) || !!(rideApi() && isRideable(token.document));
+  return attempt(() => !!(followApi() && canFollow(token.document)), false)
+    || attempt(() => !!(rideApi() && isRideable(token.document)), false);
 }
 
 /* -------------------------------------------- */
@@ -57,7 +59,7 @@ export function hasGuestEntries(token) {
 /* -------------------------------------------- */
 
 function livelyEntry(token) {
-  const mod = game.modules.get(LIVELY_ID);
+  const mod = game.modules?.get(LIVELY_ID);
   if (!mod?.active || typeof mod.api?.open !== "function") return null;
   if (!token.document.isOwner) return null;
   let allowed = game.user.isGM;
@@ -70,7 +72,7 @@ function livelyEntry(token) {
     icon: () => faIcon("fa-solid fa-ring"),
     run: () => {
       if (!token.controlled) token.control({ releaseOthers: false });
-      mod.api.open();
+      call(() => mod.api.open());
     }
   };
 }
@@ -79,9 +81,15 @@ function livelyEntry(token) {
 /*  Dxcufgb's token follower                    */
 /* -------------------------------------------- */
 
+/** The follower API, or null when the module is not installed or not active. */
 function followApi() {
-  const mod = game.modules.get(FOLLOWER_ID);
-  return mod?.active && typeof mod.api?.follow === "function" ? mod.api : null;
+  const mod = game.modules?.get(FOLLOWER_ID);
+  const api = mod?.active ? mod.api : null;
+  if (typeof api?.follow !== "function" || typeof api?.stop !== "function") return null;
+  return {
+    follow: (doc, leader) => call(() => api.follow(doc, leader)),
+    stop: doc => call(() => api.stop(doc))
+  };
 }
 
 function leaderOf(doc) {
@@ -155,11 +163,14 @@ function followEntries(token, selected) {
 /*  Rideable                                    */
 /* -------------------------------------------- */
 
+/** The Rideable API, or null when the module is not installed or not active. */
 function rideApi() {
-  const mod = game.modules.get(RIDEABLE_ID);
-  const flags = mod?.api?.RideableFlags;
-  if (!mod?.active || typeof game.Rideable?.ToggleMount !== "function" || !flags) return null;
-  return { flags, toggle: (riders, mount) => game.Rideable.ToggleMount(riders, mount) };
+  const mod = game.modules?.get(RIDEABLE_ID);
+  if (!mod?.active) return null;
+  const flags = mod.api?.RideableFlags;
+  if (typeof flags?.TokenisRideable !== "function" || typeof flags.isRiddenby !== "function") return null;
+  if (typeof game.Rideable?.ToggleMount !== "function") return null;
+  return { flags, toggle: (riders, mount) => call(() => game.Rideable.ToggleMount(riders, mount)) };
 }
 
 function isRideable(doc) {
@@ -201,6 +212,22 @@ function rideEntry(token, selected) {
 /* -------------------------------------------- */
 /*  Helpers                                     */
 /* -------------------------------------------- */
+
+/** fn(), or fallback when it throws: an optional module must never break the menu. */
+function attempt(fn, fallback) {
+  try { return fn() ?? fallback; } catch (err) {
+    console.warn("dxcufgbs-token-context-menu | integration failed", err);
+    return fallback;
+  }
+}
+
+/** Runs a call into another module, logging instead of throwing when it fails. */
+async function call(fn) {
+  try { return await fn(); } catch (err) {
+    console.error("dxcufgbs-token-context-menu | integration call failed", err);
+    ui.notifications?.error(game.i18n.localize("DXTCM.Integration.Failed"));
+  }
+}
 
 /** The user's own tokens on the target's scene, other than the target, nearest first. */
 function ownTokens(target) {

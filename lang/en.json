@@ -31,6 +31,9 @@
     "Ride": {
       "Label": "Ride",
       "Dismount": "Dismount"
+    },
+    "Integration": {
+      "Failed": "The other module could not carry out that action. See the console for details."
     }
   }
 }
