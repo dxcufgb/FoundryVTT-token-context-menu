@@ -168,7 +168,8 @@ function rideApi() {
   const mod = game.modules?.get(RIDEABLE_ID);
   if (!mod?.active) return null;
   const flags = mod.api?.RideableFlags;
-  if (!flags || typeof game.Rideable?.ToggleMount !== "function") return null;
+  if (typeof flags?.TokenisRideable !== "function" || typeof flags.isRiddenby !== "function") return null;
+  if (typeof game.Rideable?.ToggleMount !== "function") return null;
   return { flags, toggle: (riders, mount) => call(() => game.Rideable.ToggleMount(riders, mount)) };
 }
 
