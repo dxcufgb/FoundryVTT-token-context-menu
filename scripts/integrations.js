@@ -2,6 +2,7 @@
  * Menu entries for other modules, shown when they are active in the world. All of them are
  * optional: a module that is not installed, inactive or broken just adds no entry.
  *  - Dxcufgb's lively tokens: "Animated token ring" opens its ring window.
+ *  - Dxcufgb's damage dice trails: "Dice trails" opens its window of the user's trails.
  *  - Dxcufgb's token follower: "Follow this token".
  *  - Rideable: "Ride" (or "Dismount") on tokens marked as rideable.
  *
@@ -13,6 +14,7 @@
  */
 
 const LIVELY_ID = "dxcufgbs-lively-tokens";
+const TRAILS_ID = "dxcufgbs-dice-trails";
 const FOLLOWER_ID = "dxcufgbs-token-follower";
 const RIDEABLE_ID = "Rideable";
 
@@ -37,6 +39,9 @@ export function integrationEntries(token, { selected, guest = false } = {}) {
 
   const lively = guest ? null : attempt(() => livelyEntry(token), null);
   if (lively) { entries.push(lively); replaces.push(REPLACES.lively); }
+
+  const trails = guest ? null : attempt(() => trailsEntry(token), null);
+  if (trails) entries.push(trails);
 
   entries.push(...attempt(() => followEntries(token, selected), []));
 
@@ -74,6 +79,22 @@ function livelyEntry(token) {
       if (!token.controlled) token.control({ releaseOthers: false });
       call(() => mod.api.open());
     }
+  };
+}
+
+/* -------------------------------------------- */
+/*  Dxcufgb's damage dice trails                */
+/* -------------------------------------------- */
+
+/** The trails are the user's own (not the token's), so the entry is just a shortcut to the window. */
+function trailsEntry(token) {
+  const mod = game.modules?.get(TRAILS_ID);
+  if (!mod?.active || typeof mod.api?.open !== "function") return null;
+  if (!token.document.isOwner) return null;
+  return {
+    label: game.i18n.localize("DXTCM.Trails.Label"),
+    icon: () => faIcon("fa-solid fa-dice-d20"),
+    run: () => call(() => mod.api.open())
   };
 }
 
