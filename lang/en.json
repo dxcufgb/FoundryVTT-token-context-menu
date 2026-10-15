@@ -23,6 +23,9 @@
     "Lively": {
       "Label": "Animated token ring"
     },
+    "Trails": {
+      "Label": "Dice trails"
+    },
     "Follow": {
       "Label": "Follow this token",
       "StopThis": "Stop following this token",

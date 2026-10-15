@@ -9,7 +9,8 @@
  * and keep working without knowing anything about them. Palettes (status effects, movement
  * actions, ...) open as sub-menus.
  *
- * Entries for other modules (Dxcufgb's lively tokens, Dxcufgb's token follower, Rideable)
+ * Entries for other modules (Dxcufgb's lively tokens, Dxcufgb's damage dice trails,
+ * Dxcufgb's token follower, Rideable)
  * come from integrations.js.
  *
  * Players cannot open Foundry's Token HUD on tokens they do not own. To follow or ride such a
