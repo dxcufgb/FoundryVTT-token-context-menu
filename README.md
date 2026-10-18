@@ -1,5 +1,11 @@
 # Dxcufgb's token context menu
 
+[![Foundry v13](https://img.shields.io/github/v/release/dxcufgb/FoundryVTT-token-context-menu?label=Foundry%20v13&logo=foundryvirtualtabletop&color=ff6400)](https://github.com/dxcufgb/FoundryVTT-token-context-menu/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/dxcufgb/FoundryVTT-token-context-menu/module.zip?label=downloads&color=blue)](https://github.com/dxcufgb/FoundryVTT-token-context-menu/releases)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-support-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/dxcufgb)\
+[![CI](https://img.shields.io/github/actions/workflow/status/dxcufgb/FoundryVTT-token-context-menu/ci.yml?branch=main&label=CI)](https://github.com/dxcufgb/FoundryVTT-token-context-menu/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/dxcufgb/FoundryVTT-token-context-menu)](LICENSE)
+
 Right-click a token and get a proper menu instead of a ring of loose icons: every Token HUD button is shown with its icon **and** its description, so you never have to hover to find out what a button does.
 
 **Foundry VTT:** v13 · system agnostic
