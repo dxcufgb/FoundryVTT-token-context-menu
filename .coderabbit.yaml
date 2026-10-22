@@ -1,0 +1,18 @@
+# CodeRabbit settings for FoundryVTT-token-context-menu.
+# Shared rules come from the central dxcufgb/coderabbit repository (inheritance: true), and CodeRabbit reads
+# the README as code guidelines. Only what is specific to this repository is here.
+# Check the merged result on a pull request with: @coderabbitai configuration
+inheritance: true
+
+reviews:
+  path_instructions:
+    - path: "scripts/**/*.js"
+      instructions: |
+        Replaces the Token HUD with a menu that lists every HUD button with its label: client-side UI only. It
+        must keep working when other modules add HUD buttons (read them from the rendered HUD, don't hard-code),
+        never block the original actions, and remove its listeners when the HUD closes.
+    - path: ".github/workflows/{ci,release}.yml"
+      instructions: |
+        Thin callers of dxcufgb/foundry-module-ci, identical in every Foundry module repository. Flag any change
+        here that is not the same change in all modules (it belongs in foundry-module-ci instead), except the
+        pinned SHA of foundry-module-ci itself.
