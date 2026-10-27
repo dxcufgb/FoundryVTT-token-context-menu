@@ -4,7 +4,7 @@
  *  - Dxcufgb's lively tokens: "Animated token ring" opens its ring window.
  *  - Dxcufgb's damage dice trails: "Dice trails" opens its window of the user's trails.
  *  - Dxcufgb's token follower: "Follow this token".
- *  - Rideable: "Ride" (or "Dismount") on tokens marked as rideable.
+ *  - Rideable: "Ride" (or "Dismount") on tokens marked as rideable in their token settings.
  *
  * Follow and Ride need a token that does the following / riding. That is, in order:
  * the tokens the user had selected when right-clicking (right-clicking selects the clicked
@@ -194,8 +194,22 @@ function rideApi() {
   return { flags, toggle: (riders, mount) => call(() => game.Rideable.ToggleMount(riders, mount)) };
 }
 
+/**
+ * Whether the token is marked as rideable in its token settings (or, in PF2e, has the
+ * "rideable" trait when Rideable is set to use it). Not Rideable's own TokenisRideable: that
+ * also counts every unmarked token while its "Tokens rideable by default" setting is on (its
+ * default), which put Ride on every token.
+ */
 function isRideable(doc) {
-  try { return !!rideApi()?.flags.TokenisRideable(doc); } catch (_) { return false; }
+  if (doc?.flags?.[RIDEABLE_ID]?.issetRideableFlag === true) return true;
+  return hasRideableTrait(doc);
+}
+
+function hasRideableTrait(doc) {
+  if (game.system?.id !== "pf2e") return false;
+  try { if (!game.settings.get(RIDEABLE_ID, "RideableTag")) return false; } catch (_) { return false; }
+  const traits = doc?.actor?.system?.traits?.value;
+  return Array.isArray(traits) && traits.some(t => String(t).includes("rideable"));
 }
 
 function rides(rider, mount, api) {
