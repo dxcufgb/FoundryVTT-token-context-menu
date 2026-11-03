@@ -31,6 +31,6 @@ The full guide is in the [wiki](https://github.com/dxcufgb/FoundryVTT-token-cont
 - [Settings](https://github.com/dxcufgb/FoundryVTT-token-context-menu/wiki/Settings): the three settings
 - [For Module Authors](https://github.com/dxcufgb/FoundryVTT-token-context-menu/wiki/For-Module-Authors): getting your HUD button into the menu
 
-## Releasing
+## License
 
-For the maintainer: **Actions → Release module → Run workflow**, type the version (for example `1.2.3`) and run it. The module is checked and packaged first; only then is the release `v1.2.3` published with `module.json` and `module.zip`. CI and releases come from [dxcufgb/foundry-module-ci](https://github.com/dxcufgb/foundry-module-ci), the same for every module.
+[MIT](LICENSE)
