@@ -12,6 +12,9 @@ const MODULE_ID = "dxcufgbs-token-context-menu";
 /** Distance of the label from the cursor, in pixels. */
 const OFFSET = 16;
 
+/** For the debug recorder: whether a token is hovered and the distance label is shown. */
+export const distanceState = () => ({ hovering: !!hovered, labelShown: !!label });
+
 /** The token under the mouse, while the label is shown for it. */
 let hovered = null;
 /** The label element. */

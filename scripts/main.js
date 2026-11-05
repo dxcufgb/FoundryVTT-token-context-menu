@@ -18,8 +18,9 @@
  * bars, HP, effects or anything else of the token.
  */
 
-import { integrationEntries, hasGuestEntries } from "./integrations.js";
-import "./distance.js";
+import { integrationEntries, hasGuestEntries, integrationStatus, integrationErrors } from "./integrations.js";
+import { distanceState } from "./distance.js";
+import { crumb, codeId, registerDebugRecorder } from "./debug-recorder.js";
 
 const MODULE_ID = "dxcufgbs-token-context-menu";
 
@@ -40,6 +41,11 @@ const state = {
   observer: null,
   timer: null
 };
+
+/** Counters since this client loaded, for the debug recorder. */
+const stats = { builds: 0, emptyCloses: 0, entryRuns: 0, guestOpens: 0, statusToggleFailed: 0 };
+/** Entries in the menu that was built last: {hud, integration}. */
+let lastBuild = null;
 
 /** The selection just before the last right-click on the canvas (which changes the selection). */
 let rightDown = null;
@@ -63,7 +69,36 @@ Hooks.once("init", () => {
     name: "DXTCM.Settings.FixedSize.Name", hint: "DXTCM.Settings.FixedSize.Hint",
     scope: "client", config: true, type: Boolean, default: true, onChange: rerender
   });
+  registerDebugRecorder(debugSnapshot);
 });
+
+/* -------------------------------------------- */
+/*  Debug Recorder (optional)                   */
+/* -------------------------------------------- */
+
+/** Runtime state for Dxcufgb's Debug Recorder: counts, booleans and fixed ids only, never names or labels. */
+function debugSnapshot() {
+  const hud = canvas?.tokens?.hud;
+  const hudRoot = hud?.element;
+  return {
+    isGM: game.user.isGM,
+    hud: {
+      rendered: !!hud?.rendered,
+      menuActive: !!hudRoot?.classList?.contains("dxtcm-active"),
+      menuShown: !!hudRoot?.querySelector?.(":scope > .dxtcm-menu")
+    },
+    guestMenuOpen: !!guest,
+    openSub: codeId(state.open),
+    filterUsed: !!state.filter,
+    selectedTokens: state.selected?.length ?? 0,
+    observing: !!state.observer && !!state.tokenId,
+    lastBuild,
+    integrations: integrationStatus(),
+    integrationErrors: { ...integrationErrors },
+    distance: distanceState(),
+    counters: { ...stats }
+  };
+}
 
 /* -------------------------------------------- */
 /*  Token HUD                                   */
@@ -78,11 +113,14 @@ Hooks.on("renderTokenHUD", (hud, html) => {
 
   if (!game.settings.get(MODULE_ID, "enabled")) {
     root.classList.remove("dxtcm-active");
+    crumb("hud.render", { enabled: false });
     return;
   }
-  closeGuestMenu();
+  closeGuestMenu("hudOpened");
   const tokenId = hud.object?.id ?? null;
-  if (tokenId !== state.tokenId) resetState(tokenId);
+  const newToken = tokenId !== state.tokenId;
+  if (newToken) resetState(tokenId);
+  crumb("hud.render", { enabled: true, newToken, selected: state.selected?.length ?? 0 });
   root.classList.add("dxtcm-active");
 
   // Build once the other renderTokenHUD hooks have added their buttons, and again whenever
@@ -96,6 +134,7 @@ Hooks.on("renderTokenHUD", (hud, html) => {
 
 Hooks.on("closeTokenHUD", () => {
   if (guest) return;
+  crumb("hud.close");
   state.observer?.disconnect();
   clearTimeout(state.timer);
   resetState(null);
@@ -120,12 +159,12 @@ function openMenu() {
 
 // Follow / ride state lives in token flags: rebuild when they change.
 Hooks.on("updateToken", (doc, changes) => {
-  if (guest && doc.id === guest.token.id && ("x" in changes || "y" in changes || "hidden" in changes)) return closeGuestMenu();
+  if (guest && doc.id === guest.token.id && ("x" in changes || "y" in changes || "hidden" in changes)) return closeGuestMenu("tokenChanged");
   const open = openMenu();
   if (open && changes.flags) schedule(open.hud, open.root);
 });
-Hooks.on("deleteToken", doc => { if (guest && doc.id === guest.token.id) closeGuestMenu(); });
-Hooks.on("canvasTearDown", () => closeGuestMenu());
+Hooks.on("deleteToken", doc => { if (guest && doc.id === guest.token.id) closeGuestMenu("tokenDeleted"); });
+Hooks.on("canvasTearDown", () => closeGuestMenu("canvasTearDown"));
 
 /** The user does not own the token: the menu only offers following and riding it. */
 function isGuest(hud) {
@@ -163,7 +202,7 @@ function isBoard(target) {
 
 // Capture phase on the document: runs before Foundry sees the press and changes the selection.
 document.addEventListener("pointerdown", ev => {
-  if (guest && !ev.target?.closest?.("#dxtcm-guest .dxtcm-menu")) closeGuestMenu();
+  if (guest && !ev.target?.closest?.("#dxtcm-guest .dxtcm-menu")) closeGuestMenu("clickOutside");
   if (ev.button !== 2 || !isBoard(ev.target) || !canvas?.ready) return;
   rightDown = {
     time: Date.now(), x: ev.clientX, y: ev.clientY,
@@ -177,12 +216,13 @@ document.addEventListener("pointerup", ev => {
   if (Date.now() - rightDown.time > CLICK_MS) return;
   if (game.user.isGM || !game.settings.get(MODULE_ID, "enabled") || !canvas.tokens?.active) return;
   const token = tokenAt(ev.clientX, ev.clientY);
-  if (!token || token.document.isOwner || !hasGuestEntries(token)) return;
+  if (!token || token.document.isOwner) return;
+  if (!hasGuestEntries(token)) return crumb("guest.skip", { reason: "noEntries" });
   openGuestMenu(token);
 }, true);
 
 document.addEventListener("keydown", ev => {
-  if (guest && ev.key === "Escape") closeGuestMenu();
+  if (guest && ev.key === "Escape") closeGuestMenu("escape");
 }, true);
 
 /** The topmost visible token under a point on the screen. */
@@ -204,9 +244,11 @@ function tokenAt(clientX, clientY) {
  * zooms with the canvas. It shows only the Follow / Ride entries.
  */
 function openGuestMenu(token) {
-  closeGuestMenu();
+  closeGuestMenu("reopen");
   const layer = document.getElementById("hud");
-  if (!layer) return;
+  if (!layer) return crumb("guest.skip", { reason: "noHudLayer" });
+  stats.guestOpens++;
+  crumb("guest.open");
   if (canvas.tokens.hud?.rendered) canvas.tokens.hud.close();
   const root = document.createElement("div");
   root.id = "dxtcm-guest";
@@ -223,8 +265,9 @@ function openGuestMenu(token) {
   build(hud, root);
 }
 
-function closeGuestMenu() {
+function closeGuestMenu(reason = "close") {
   if (!guest) return;
+  crumb("guest.close", { reason });
   clearTimeout(state.timer);
   guest.root.remove();
   guest = null;
@@ -342,7 +385,13 @@ function build(hud, root) {
   root.querySelector(":scope > .dxtcm-menu")?.remove();
 
   const entries = collect(hud, root);
+  const fromHud = entries.filter(e => e.el).length;
+  lastBuild = { hud: fromHud, integration: entries.length - fromHud, guest: isGuest(hud) };
+  stats.builds++;
+  crumb("menu.build", { ...lastBuild, openSub: codeId(state.open) });
   if (!entries.length) {
+    stats.emptyCloses++;
+    crumb("menu.empty", { guest: isGuest(hud) });
     hud.close?.();
     return;
   }
@@ -396,12 +445,17 @@ function build(hud, root) {
     } else {
       item.addEventListener("click", ev => {
         ev.preventDefault();
+        stats.entryRuns++;
+        crumb("menu.entry", { source: entry.el ? "hud" : "integration", action: codeId(entry.el?.dataset?.action), right: false });
         if (entry.run) entry.run();
         else press(entry.el, "click");
       });
       item.addEventListener("contextmenu", ev => {
         ev.preventDefault();
-        if (entry.el) press(entry.el, "contextmenu");
+        if (!entry.el) return;
+        stats.entryRuns++;
+        crumb("menu.entry", { source: "hud", action: codeId(entry.el.dataset?.action), right: true });
+        press(entry.el, "contextmenu");
       });
     }
     const li = document.createElement("li");
@@ -467,6 +521,7 @@ function openSub(menu, item, entry) {
   sub.className = "dxtcm-sub";
   const children = entry.sub.children();
   const hasStatus = children.some(c => c.statusId);
+  crumb("menu.sub.open", { sub: codeId(entry.sub.key), children: children.length, statuses: children.filter(c => c.statusId).length, filter: children.length > FILTER_FROM });
 
   let filter = null;
   if (children.length > FILTER_FROM) {
@@ -539,13 +594,18 @@ function openSub(menu, item, entry) {
 async function activate(hud, el, statusId, right) {
   const actor = hud.object?.actor;
   if (statusId && typeof actor?.toggleStatusEffect === "function") {
+    crumb("palette.status", { overlay: right });
     try {
       await actor.toggleStatusEffect(statusId, { overlay: right });
     } catch (err) {
+      stats.statusToggleFailed++;
+      crumb("palette.statusFailed", { error: err?.name ?? "Error" });
       console.error(`${MODULE_ID} | could not toggle status effect ${statusId}`, err);
     }
     return;
   }
+  // A status entry without an actor to toggle it on: fall back to clicking the HUD's own button.
+  crumb("palette.press", { status: !!statusId, right, action: codeId(el.dataset?.action) });
   press(el, right ? "contextmenu" : "click");
 }
 

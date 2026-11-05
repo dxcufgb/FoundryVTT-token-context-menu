@@ -13,6 +13,8 @@
  * the entry opens a sub-menu to pick the token.
  */
 
+import { crumb } from "./debug-recorder.js";
+
 const LIVELY_ID = "dxcufgbs-lively-tokens";
 const TRAILS_ID = "dxcufgbs-dice-trails";
 const FOLLOWER_ID = "dxcufgbs-token-follower";
@@ -37,15 +39,15 @@ export function integrationEntries(token, { selected, guest = false } = {}) {
   const replaces = [];
   if (!token?.document) return { entries, replaces };
 
-  const lively = guest ? null : attempt(() => livelyEntry(token), null);
+  const lively = guest ? null : attempt(() => livelyEntry(token), null, "lively");
   if (lively) { entries.push(lively); replaces.push(REPLACES.lively); }
 
-  const trails = guest ? null : attempt(() => trailsEntry(token), null);
+  const trails = guest ? null : attempt(() => trailsEntry(token), null, "trails");
   if (trails) entries.push(trails);
 
-  entries.push(...attempt(() => followEntries(token, selected), []));
+  entries.push(...attempt(() => followEntries(token, selected), [], "follow"));
 
-  const ride = attempt(() => rideEntry(token, selected), null);
+  const ride = attempt(() => rideEntry(token, selected), null, "ride");
   if (ride) { entries.push(ride); replaces.push(REPLACES.ride); }
 
   return { entries, replaces };
@@ -55,9 +57,27 @@ export function integrationEntries(token, { selected, guest = false } = {}) {
 export function hasGuestEntries(token) {
   if (!token?.document || token.document.isOwner) return false;
   if (!ownTokens(token.document).length) return false;
-  return attempt(() => !!(followApi() && canFollow(token.document)), false)
-    || attempt(() => !!(rideApi() && isRideable(token.document)), false);
+  return attempt(() => !!(followApi() && canFollow(token.document)), false, "follow")
+    || attempt(() => !!(rideApi() && isRideable(token.document)), false, "ride");
 }
+
+/**
+ * For the debug recorder: which optional modules are active and whether their API looks usable
+ * (the menu only adds their entries when it does). Booleans only.
+ */
+export function integrationStatus() {
+  const active = id => !!game.modules?.get(id)?.active;
+  const fn = (id, name) => typeof game.modules?.get(id)?.api?.[name] === "function";
+  return {
+    lively: { active: active(LIVELY_ID), apiOk: fn(LIVELY_ID, "open") },
+    trails: { active: active(TRAILS_ID), apiOk: fn(TRAILS_ID, "open") },
+    follower: { active: active(FOLLOWER_ID), apiOk: attempt(() => !!followApi(), false) },
+    rideable: { active: active(RIDEABLE_ID), apiOk: attempt(() => !!rideApi(), false) }
+  };
+}
+
+/** Failures of the optional integrations since this client loaded (counts and the last one). */
+export const integrationErrors = { failed: 0, callFailed: 0, last: null };
 
 /* -------------------------------------------- */
 /*  Dxcufgb's lively tokens                     */
@@ -77,7 +97,7 @@ function livelyEntry(token) {
     icon: () => faIcon("fa-solid fa-ring"),
     run: () => {
       if (!token.controlled) token.control({ releaseOthers: false });
-      call(() => mod.api.open());
+      call(() => mod.api.open(), "lively", "open");
     }
   };
 }
@@ -94,7 +114,7 @@ function trailsEntry(token) {
   return {
     label: game.i18n.localize("DXTCM.Trails.Label"),
     icon: () => faIcon("fa-solid fa-dice-d20"),
-    run: () => call(() => mod.api.open())
+    run: () => call(() => mod.api.open(), "trails", "open")
   };
 }
 
@@ -108,8 +128,8 @@ function followApi() {
   const api = mod?.active ? mod.api : null;
   if (typeof api?.follow !== "function" || typeof api?.stop !== "function") return null;
   return {
-    follow: (doc, leader) => call(() => api.follow(doc, leader)),
-    stop: doc => call(() => api.stop(doc))
+    follow: (doc, leader) => call(() => api.follow(doc, leader), "follow", "follow"),
+    stop: doc => call(() => api.stop(doc), "follow", "stop")
   };
 }
 
@@ -191,7 +211,7 @@ function rideApi() {
   const flags = mod.api?.RideableFlags;
   if (typeof flags?.TokenisRideable !== "function" || typeof flags.isRiddenby !== "function") return null;
   if (typeof game.Rideable?.ToggleMount !== "function") return null;
-  return { flags, toggle: (riders, mount) => call(() => game.Rideable.ToggleMount(riders, mount)) };
+  return { flags, toggle: (riders, mount) => call(() => game.Rideable.ToggleMount(riders, mount), "ride", "toggle") };
 }
 
 /**
@@ -249,16 +269,23 @@ function rideEntry(token, selected) {
 /* -------------------------------------------- */
 
 /** fn(), or fallback when it throws: an optional module must never break the menu. */
-function attempt(fn, fallback) {
+function attempt(fn, fallback, integration = null) {
   try { return fn() ?? fallback; } catch (err) {
+    integrationErrors.failed++;
+    integrationErrors.last = integration ? `${integration}.failed` : "failed";
+    crumb("integration.fail", { integration, error: err?.name ?? "Error" });
     console.warn("dxcufgbs-token-context-menu | integration failed", err);
     return fallback;
   }
 }
 
 /** Runs a call into another module, logging instead of throwing when it fails. */
-async function call(fn) {
+async function call(fn, integration, op) {
+  crumb("integration.call", { integration, op });
   try { return await fn(); } catch (err) {
+    integrationErrors.callFailed++;
+    integrationErrors.last = `${integration}.${op}`;
+    crumb("integration.callFailed", { integration, op, error: err?.name ?? "Error" });
     console.error("dxcufgbs-token-context-menu | integration call failed", err);
     ui.notifications?.error(game.i18n.localize("DXTCM.Integration.Failed"));
   }
