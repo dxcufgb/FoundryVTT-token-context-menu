@@ -273,7 +273,7 @@ function attempt(fn, fallback, integration = null) {
   try { return fn() ?? fallback; } catch (err) {
     integrationErrors.failed++;
     integrationErrors.last = integration ? `${integration}.failed` : "failed";
-    crumb("integration.fail", { integration, error: err?.name ?? "Error" });
+    crumb("integration.fail", { integration });
     console.warn("dxcufgbs-token-context-menu | integration failed", err);
     return fallback;
   }
@@ -285,7 +285,7 @@ async function call(fn, integration, op) {
   try { return await fn(); } catch (err) {
     integrationErrors.callFailed++;
     integrationErrors.last = `${integration}.${op}`;
-    crumb("integration.callFailed", { integration, op, error: err?.name ?? "Error" });
+    crumb("integration.callFailed", { integration, op });
     console.error("dxcufgbs-token-context-menu | integration call failed", err);
     ui.notifications?.error(game.i18n.localize("DXTCM.Integration.Failed"));
   }
