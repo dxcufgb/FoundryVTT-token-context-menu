@@ -21,20 +21,22 @@ let snapshotFn = null;
 /** A recorder API that arrived before registerDebugRecorder() was called. */
 let pending = null;
 
-/** Register with the recorder API (once; later calls do nothing). */
+/**
+ * Register with the recorder API (once; later calls do nothing). The API is kept only when register() succeeds (it
+ * returns false on failure), so the init / ready fallback can try again.
+ */
 function attach(api) {
   if (rec || typeof api?.register !== "function") return;
   if (!snapshotFn) { pending = api; return; }
   try {
-    api.register(MODULE_ID, {
+    if (api.register(MODULE_ID, {
       snapshot: () => {
         try { return snapshotFn(); } catch (err) {
           console.warn(`${MODULE_ID} | debug recorder snapshot failed`, err);
           return { snapshotError: true };
         }
       }
-    });
-    rec = api;
+    }) !== false) rec = api;
   } catch (err) {
     console.warn(`${MODULE_ID} | could not register with the debug recorder`, err);
   }
