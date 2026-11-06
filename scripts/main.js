@@ -22,6 +22,9 @@ import { integrationEntries, hasGuestEntries, integrationStatus, integrationErro
 import { distanceState } from "./distance.js";
 import { crumb, codeId, registerDebugRecorder } from "./debug-recorder.js";
 
+/** A sub-menu key for the debug recorder: palette keys come from the HUD (any module), so only their kind is recorded. */
+const subId = key => (String(key ?? "").startsWith("palette:") ? "palette" : codeId(key));
+
 const MODULE_ID = "dxcufgbs-token-context-menu";
 
 /** Buttons of the HUD that get a menu entry. */
@@ -88,7 +91,7 @@ function debugSnapshot() {
       menuShown: !!hudRoot?.querySelector?.(":scope > .dxtcm-menu")
     },
     guestMenuOpen: !!guest,
-    openSub: codeId(state.open),
+    openSub: subId(state.open),
     filterUsed: !!state.filter,
     selectedTokens: state.selected?.length ?? 0,
     observing: !!state.observer && !!state.tokenId,
@@ -388,7 +391,7 @@ function build(hud, root) {
   const fromHud = entries.filter(e => e.el).length;
   lastBuild = { hud: fromHud, integration: entries.length - fromHud, guest: isGuest(hud) };
   stats.builds++;
-  crumb("menu.build", { ...lastBuild, openSub: codeId(state.open) });
+  crumb("menu.build", { ...lastBuild, openSub: subId(state.open) });
   if (!entries.length) {
     stats.emptyCloses++;
     crumb("menu.empty", { guest: isGuest(hud) });
@@ -521,7 +524,7 @@ function openSub(menu, item, entry) {
   sub.className = "dxtcm-sub";
   const children = entry.sub.children();
   const hasStatus = children.some(c => c.statusId);
-  crumb("menu.sub.open", { sub: codeId(entry.sub.key), children: children.length, statuses: children.filter(c => c.statusId).length, filter: children.length > FILTER_FROM });
+  crumb("menu.sub.open", { sub: subId(entry.sub.key), children: children.length, statuses: children.filter(c => c.statusId).length, filter: children.length > FILTER_FROM });
 
   let filter = null;
   if (children.length > FILTER_FROM) {
@@ -599,7 +602,7 @@ async function activate(hud, el, statusId, right) {
       await actor.toggleStatusEffect(statusId, { overlay: right });
     } catch (err) {
       stats.statusToggleFailed++;
-      crumb("palette.statusFailed", { error: err?.name ?? "Error" });
+      crumb("palette.statusFailed", { overlay: right });
       console.error(`${MODULE_ID} | could not toggle status effect ${statusId}`, err);
     }
     return;

@@ -8,7 +8,7 @@ npm dependencies.
 - `scripts/main.js` – settings, the menu built from the rendered Token HUD's buttons and palettes (sub-menus), and the players' own menu on tokens they don't own (Follow / Ride only).
 - `scripts/integrations.js` – optional entries for Dxcufgb's lively tokens, Dxcufgb's damage dice trails, Dxcufgb's token follower and Rideable.
 - `scripts/distance.js` – distance on hover.
-- `scripts/debug-recorder.js` – optional integration with Dxcufgb's Debug Recorder (`dxcufgbs-debug-recorder`): registers the snapshot (built in `main.js`) and exports `crumb(key, data)` for breadcrumbs and `codeId()` for recording HUD action ids; does nothing when the recorder is not installed.
+- `scripts/debug-recorder.js` – optional integration with Dxcufgb's Debug Recorder (`dxcufgbs-debug-recorder`): registers the snapshot (built in `main.js`) and exports `crumb(key, data)` for breadcrumbs and `codeId()` for recording HUD action ids (palette sub-menu keys are recorded only as `palette`); does nothing when the recorder is not installed.
 - `.github/workflows/ci.yml` / `release.yml` – thin callers of `dxcufgb/foundry-module-ci` (checks, packaging, release); identical in every module, do not edit here.
 
 ## Conventions
