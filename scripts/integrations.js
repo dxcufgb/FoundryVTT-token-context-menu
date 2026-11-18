@@ -13,7 +13,7 @@
  * the entry opens a sub-menu to pick the token.
  */
 
-import { crumb } from "./debug-recorder.js";
+import { crumb, errorName } from "./debug-recorder.js";
 
 const LIVELY_ID = "dxcufgbs-lively-tokens";
 const TRAILS_ID = "dxcufgbs-dice-trails";
@@ -273,7 +273,7 @@ function attempt(fn, fallback, integration = null) {
   try { return fn() ?? fallback; } catch (err) {
     integrationErrors.failed++;
     integrationErrors.last = integration ? `${integration}.failed` : "failed";
-    crumb("integration.fail", { integration });
+    crumb("integration.fail", { integration, error: errorName(err) });
     console.warn("dxcufgbs-token-context-menu | integration failed", err);
     return fallback;
   }
@@ -285,7 +285,7 @@ async function call(fn, integration, op) {
   try { return await fn(); } catch (err) {
     integrationErrors.callFailed++;
     integrationErrors.last = `${integration}.${op}`;
-    crumb("integration.callFailed", { integration, op });
+    crumb("integration.callFailed", { integration, op, error: errorName(err) });
     console.error("dxcufgbs-token-context-menu | integration call failed", err);
     ui.notifications?.error(game.i18n.localize("DXTCM.Integration.Failed"));
   }

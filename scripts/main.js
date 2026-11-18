@@ -72,8 +72,9 @@ Hooks.once("init", () => {
     name: "DXTCM.Settings.FixedSize.Name", hint: "DXTCM.Settings.FixedSize.Hint",
     scope: "client", config: true, type: Boolean, default: true, onChange: rerender
   });
-  registerDebugRecorder(debugSnapshot);
 });
+
+Hooks.once("ready", () => registerDebugRecorder(MODULE_ID, debugSnapshot));
 
 /* -------------------------------------------- */
 /*  Debug Recorder (optional)                   */
