@@ -1,81 +1,115 @@
 /**
- * Optional integration with Dxcufgb's Debug Recorder (dxcufgbs-debug-recorder).
+ * Optional integration with Dxcufgb's Debug Recorder (module id `dxcufgbs-debug-recorder`), a GM-run recorder that
+ * collects debugging data from the dxcufgb modules into a file for bug reports. Not a dependency: without the
+ * recorder (or while it isn't recording) everything here does nothing, and nothing the recorder does can break the
+ * menu (every call into it is wrapped).
  *
- * While the GM records, the recorder collects a snapshot of this module's runtime state and a
- * trail of breadcrumbs (what the menu did and when) for bug reports. The recorder is NOT a
- * dependency: when it is not installed or not active nothing here does anything, and a failure
- * inside the recorder never reaches the menu (every call is wrapped in try/catch).
+ * The recorder announces itself with the hook `dxcufgbs-debug-recorder.ready` (its API as the argument) and also
+ * keeps the API at `game.modules.get("dxcufgbs-debug-recorder").api`, so the order the modules load in doesn't
+ * matter: whichever comes first registers, and only once.
  *
- * Privacy: snapshots and breadcrumbs hold only counts, booleans and fixed ids (integration
- * names, HUD action ids). Never token, actor or user names, button labels, image paths or
- * anything else a user typed.
+ * Snapshot and breadcrumb data are counts, booleans and fixed ids only (integration names, HUD action ids through
+ * codeId()): never token, actor or user names, button labels, image paths, URLs or anything else a user typed.
  */
 
-const MODULE_ID = "dxcufgbs-token-context-menu";
 const RECORDER_ID = "dxcufgbs-debug-recorder";
 
-/** The recorder API once registered with it, else null. */
-let rec = null;
-/** Builds this module's snapshot; set by registerDebugRecorder(). */
+/** This module's id (given by registerDebugRecorder, so this file needs no import from the entry script). */
+let moduleId = null;
+/** The recorder API this module registered with (null until then). */
+let recorder = null;
+/** The recorder API from its ready hook. */
+let announced = null;
+/** Builds this module's snapshot (set by registerDebugRecorder). */
 let snapshotFn = null;
-/** A recorder API that arrived before registerDebugRecorder() was called. */
-let pending = null;
 
-/**
- * Register with the recorder API (once; later calls do nothing). The API is kept only when register() succeeds (it
- * returns false on failure), so the init / ready fallback can try again.
- */
-function attach(api) {
-  if (rec || typeof api?.register !== "function") return;
-  if (!snapshotFn) { pending = api; return; }
+/** The built-in error types a breadcrumb may name; anything else (a custom name can hold any text) is "Error". */
+const ERROR_NAMES = new Set([
+  "Error", "TypeError", "RangeError", "ReferenceError", "SyntaxError", "EvalError", "URIError", "AggregateError",
+  "AbortError", "NotFoundError", "NotAllowedError", "InvalidStateError", "QuotaExceededError", "SecurityError"
+]);
+
+/** The recorder's API: from its ready hook, or from its module entry if it was ready first; null without it. */
+function recorderApi() {
+  return announced ?? game.modules?.get(RECORDER_ID)?.api ?? null;
+}
+
+/** The snapshot handed to the recorder; a failure is reported in the snapshot instead of thrown. */
+function snapshot() {
   try {
-    if (api.register(MODULE_ID, {
-      snapshot: () => {
-        try { return snapshotFn(); } catch (err) {
-          console.warn(`${MODULE_ID} | debug recorder snapshot failed`, err);
-          return { snapshotError: true };
-        }
-      }
-    }) !== false) rec = api;
+    return snapshotFn?.() ?? {};
   } catch (err) {
-    console.warn(`${MODULE_ID} | could not register with the debug recorder`, err);
+    return { snapshotError: errorName(err) };
   }
 }
 
-/** The recorder's API when it is already ready (its hook fired before this code ran). */
-const readyApi = () => globalThis.game?.modules?.get?.(RECORDER_ID)?.api;
+/**
+ * Registers with the recorder once, as soon as both the recorder and the snapshot function are there. The API is
+ * kept only when register() succeeds (it returns false on failure), so the fallback on ready can try again.
+ */
+function connect() {
+  const rec = recorderApi();
+  if (recorder || !moduleId || !snapshotFn || typeof rec?.register !== "function") return;
+  try {
+    if (rec.register(moduleId, { snapshot }) !== false) recorder = rec;
+  } catch (err) {
+    console.warn(`${moduleId} | Debug Recorder registration failed`, err);
+  }
+}
 
-// Load order must not matter: catch the recorder's ready hook, and look for an API that is already there.
-Hooks.once(`${RECORDER_ID}.ready`, api => attach(api));
-Hooks.once("init", () => attach(readyApi()));
-Hooks.once("ready", () => attach(readyApi()));
+Hooks.once(`${RECORDER_ID}.ready`, rec => {
+  announced = rec ?? null;
+  connect();
+});
+// Fallback: the recorder was ready before this module's code ran.
+Hooks.once("ready", connect);
 
 /**
- * Give the recorder this module's snapshot function. `snapshot()` must return plain JSON data.
- * Safe to call before or after the recorder is ready.
+ * Registers this module with the recorder (now if it is already there, otherwise when it announces itself).
+ * @param {string} id               this module's id (MODULE_ID)
+ * @param {() => object} fn         returns plain JSON data describing the module's runtime state
  */
-export function registerDebugRecorder(snapshot) {
-  snapshotFn = snapshot;
-  attach(pending ?? readyApi());
-  pending = null;
+export function registerDebugRecorder(id, fn) {
+  moduleId = id;
+  snapshotFn = fn;
+  connect();
 }
 
 /**
- * A code identifier (a HUD button's data-action, a palette key) that is safe to record: short
- * identifier-like strings are passed on, anything else becomes "other", nothing becomes null.
+ * Leaves a breadcrumb in the recording. Does nothing unless the recorder is installed and recording.
+ * @param {string} key                     dot-namespaced, e.g. "menu.build"
+ * @param {object|() => object} [data]     a small flat object; a function is only called while recording
+ */
+export function crumb(key, data) {
+  if (!recorder) return;
+  try {
+    if (!recorder.isRecording?.()) return;
+    recorder.breadcrumb(moduleId, key, typeof data === "function" ? data() : data);
+  } catch {
+    // A recorder problem must never break the menu.
+  }
+}
+
+/**
+ * The error's type for a breadcrumb or the snapshot: one of the built-in names in ERROR_NAMES, otherwise "Error".
+ * Never its message, which can hold names. Never throws (a throwing `name` getter gives "Error").
+ */
+export function errorName(err) {
+  let name;
+  try {
+    name = err?.name; // read once: a getter could return a different value on a second read
+  } catch {
+    return "Error";
+  }
+  return typeof name === "string" && ERROR_NAMES.has(name) ? name : "Error";
+}
+
+/**
+ * A code identifier (a HUD button's data-action, a palette key) that is safe to record: short identifier-like
+ * strings are passed on, anything else becomes "other", nothing becomes null.
  */
 export function codeId(value) {
   if (value === null || value === undefined || value === "") return null;
   const s = String(value);
   return /^[A-Za-z][\w.:-]{0,47}$/.test(s) ? s : "other";
-}
-
-/** Leave a breadcrumb (`area.action`, small flat data object) while the recorder is recording; else nothing. */
-export function crumb(key, data) {
-  if (!rec) return;
-  try {
-    if (rec.isRecording()) rec.breadcrumb(MODULE_ID, key, data);
-  } catch (_) {
-    // A recorder bug must never break the menu.
-  }
 }
