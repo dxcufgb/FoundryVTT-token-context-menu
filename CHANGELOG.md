@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.4
 
 - Debug Recorder: registers the same way as Dxcufgb's other modules (once: on the recorder's ready hook, or at `ready` when the recorder was there first). Failure breadcrumbs now include the error's type (never its message).
 
