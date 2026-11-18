@@ -92,10 +92,16 @@ export function crumb(key, data) {
 
 /**
  * The error's type for a breadcrumb or the snapshot: one of the built-in names in ERROR_NAMES, otherwise "Error".
- * Never its message, which can hold names.
+ * Never its message, which can hold names. Never throws (a throwing `name` getter gives "Error").
  */
 export function errorName(err) {
-  return ERROR_NAMES.has(err?.name) ? err.name : "Error";
+  let name;
+  try {
+    name = err?.name; // read once: a getter could return a different value on a second read
+  } catch {
+    return "Error";
+  }
+  return typeof name === "string" && ERROR_NAMES.has(name) ? name : "Error";
 }
 
 /**

@@ -72,9 +72,9 @@ Hooks.once("init", () => {
     name: "DXTCM.Settings.FixedSize.Name", hint: "DXTCM.Settings.FixedSize.Hint",
     scope: "client", config: true, type: Boolean, default: true, onChange: rerender
   });
+  // Registered at init so the recorder's ready hook (on setup) and the fallback on ready can still retry.
+  registerDebugRecorder(MODULE_ID, debugSnapshot);
 });
-
-Hooks.once("ready", () => registerDebugRecorder(MODULE_ID, debugSnapshot));
 
 /* -------------------------------------------- */
 /*  Debug Recorder (optional)                   */
